@@ -6,5 +6,5 @@ then
     npm install -g ngrok
 fi
 
-echo "🚀 Starting ngrok tunnel on port 8080..."
-ngrok http 8080
+echo "🚀 [SEED-MCP] Starting ngrok tunnel using custom domain..."
+ngrok http --domain=seed-mcp.ngrok.app 8080
