@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for seed-mcp on 2025-05-08T00:45:01Z
+# fly.toml app configuration file generated for seed-mcp-server on 2025-05-08T05:14:36Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'seed-mcp'
+app = 'seed-mcp-server'
 primary_region = 'ord'
 
 [build]
