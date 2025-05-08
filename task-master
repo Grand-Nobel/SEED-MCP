@@ -1,17 +1,31 @@
 Required MCP Capabilities for SEED Project:
 
-Based on analysis of SEED Outline sections 1 pt I, 1 pt II, 2, 3, 4, 5, 6, and 7:
+Based on comprehensive analysis of SEED Outline sections 1 pt I, 1 pt II, 2, 3, 4, 5, 6, 7, 10 pt I, 10 pt II, 10 pt III, 10 pt IX, 10 pt V, 10 pt VI, 10 pt VII, and 10 pt VIII, and exploration of existing MCP servers:
 
-1.  GitHub Interaction: Tools for accessing and potentially modifying project files. (Covered by existing GitHub MCP server)
-2.  Supabase Interaction: Specific tools for interacting with the self-hosted Supabase stack (Auth, Realtime, Storage, Edge Functions).
-3.  AI Agent Interaction: Tools for interacting with the AgentRunner and specific agents (via gRPC, GraphQL, WebSockets) and accessing related data from the database.
-4.  Direct Database Interaction (PostgreSQL): Tools for direct interaction using 'pg' for advanced operations, RLS, and managing project-specific tables.
-5.  System Command Execution: Ability to execute system commands. (Covered by existing 'execute_command' tool)
-6.  Monitoring and Error Tracking: Tools to interact with monitoring (Grafana), error tracking (Sentry), and access logs/metrics from the database.
-7.  File Storage Interaction: Tools to interact with the S3-compatible storage backend via Supabase Storage.
-8.  Secrets Management: Tools to interact with a dedicated secrets manager (e.g., HashiCorp Vault, cloud provider secrets manager).
-9.  Message Queue Interaction: Tools to interact with the chosen event bus (likely Redis Streams).
-10. External Vector Database Interaction (Potentially): Tools to interact with Pinecone/Weaviate if used.
-11. Cloud Service Interaction (Potentially): Tools to interact with cloud services like AWS.
-12. External LLM API Interaction (Potentially): Tools to interact with external LLM providers.
-13. CI/CD Integration: Tools to interact with a CI/CD pipeline.
+**Candidates for Existing MCP Servers (Evaluate for Specific Tool Needs):**
+
+*   GitHub Interaction: Tools for accessing and potentially modifying project files. (Existing GitHub MCP server is suitable)
+*   System Command Execution: Ability to execute system commands. (Existing 'execute_command' tool is suitable)
+*   Database Interaction (General): General database tools (e.g., Aiven, Hologres). *Note: Specific Supabase, RLS, and project-specific table interactions will likely require custom tools.*
+*   Message Queue Interaction (General): General Redis tools (e.g., Redis Cloud). *Note: Specific Redis Streams, RabbitMQ, and BullMQ interactions will likely require custom tools.*
+*   Secrets Management (General): General secrets management tools (e.g., Infisical). *Note: Specific HashiCorp Vault, AWS Secrets Manager, and GCP Secret Manager interactions will likely require custom tools.*
+*   Monitoring and Logging (General): General monitoring and logging platform interactions (Prometheus, Grafana, Sentry, Elasticsearch, Loki). *Note: Specific log/metric access and analysis in SEED's context will likely require custom tools.*
+*   Cloud Service Interaction (General): General cloud provider tools (AWS, GCP). *Note: Specific interactions needed by SEED agents will likely require custom tools.*
+*   External LLM API Interaction (General): General LLM provider tools (OpenAI, Gemini, Claude). *Note: Specific interactions and prompt management within SEED's AI framework will likely require custom tools.*
+
+**Require Custom MCP Tool Development within `seed-mcp` (Due to Self-Hosted Stack and Custom Components):**
+
+*   Supabase Stack Interaction: Tools for Auth, Realtime, Storage (including large data/blob handling), and Edge Functions specific to the self-hosted Supabase instance.
+*   AI Agent Interaction: Tools for interacting with AgentRunner and specific SEED agents (InsightAgent, ReflectionAgent, CommsAgent, GeminiAgent) via their defined interfaces (gRPC, GraphQL, WebSockets).
+*   Direct Database Interaction (PostgreSQL & Neo4j): Tools for direct interaction with PostgreSQL (including 'pg' client, RLS, project-specific tables) and Neo4j.
+*   File Storage Interaction (S3 Compatible): Tools for interacting with the S3-compatible storage backend, including chunked/resumable uploads and offline viewing support.
+*   Vector Database Interaction (pgvector, Pinecone, Weaviate): Tools for interacting with the specific vector databases used for AI memory and embeddings.
+*   Speech-to-Text Integration (Google Cloud Speech-to-Text): Tools for interacting with the Google Cloud Speech-to-Text API.
+*   CI/CD Integration (GitHub Actions): Tools for triggering and monitoring GitHub Actions.
+*   Containerization (AWS ECR, Kubernetes): Tools for interacting with AWS ECR and Kubernetes for deployment and management.
+*   Third-Party Services (imgproxy): Tools for interacting with imgproxy for image optimization.
+*   Workflow Management: Tools for creating, updating, and managing workflows, including their specific steps and configurations.
+*   Agent Log Review: Tools for accessing and analyzing agent execution logs, including AI-driven insights and feedback submission.
+*   Settings Management: Tools for configuring various business settings, including staff, services, AI agent parameters, and integrations.
+*   Public Portals (Booking & Lead Capture): Tools for managing the configuration and data related to the public booking and lead capture portals.
+*   Offline-First Sync: Tools related to managing the offline queue, conflict resolution, and monitoring sync status.
