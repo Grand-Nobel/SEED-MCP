@@ -13,5 +13,5 @@ This file tracks tasks and to-dos for the SEED-MCP project.
 
 - Document how to use the Supabase tools provided by `seed-mcp`.
 - Explore other potential MCP server functionalities for the project.
-- Ensure the `seed-mcp` server is running and accessible at its configured URL (`http://66.241.124.137:8080/`).
+- **ACTION REQUIRED:** Ensure the `seed-mcp` server is running and accessible at its configured URL (`http://66.241.124.137:8080/`). The server still appears disconnected from the MCP system.
 - Verify if the `seed-mcp` server now exposes the new tools correctly via MCP once it is connected.
