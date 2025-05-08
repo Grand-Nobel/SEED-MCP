@@ -1,0 +1,6 @@
+Required MCP Capabilities for SEED Project:
+
+1.  GitHub Interaction: Tools for accessing and modifying files in the project repository.
+2.  Supabase Interaction: Tools for reading and writing tenant configurations and UI events.
+3.  AI Agent Interaction: Tools for interacting with the AgentRunner and other AI services.
+4.  Monitoring: Tools for observing the deployed application and Supabase (potential need).
