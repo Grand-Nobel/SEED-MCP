@@ -1,1 +1,8 @@
-pip freeze > requirements.txt
+git add requirements.txt
+git commit -m "Fix requirements.txt formatting for Fly.io"
+git push
+fastapi==0.110.1
+uvicorn[standard]==0.29.0
+python-dotenv==1.0.1       
+httpx==0.27.0               
+pydantic[email]==2.6.4     
