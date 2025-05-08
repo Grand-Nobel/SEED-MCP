@@ -1,6 +1,17 @@
 Required MCP Capabilities for SEED Project:
 
-1.  GitHub Interaction: Tools for accessing and modifying files in the project repository.
-2.  Supabase Interaction: Tools for reading and writing tenant configurations and UI events.
-3.  AI Agent Interaction: Tools for interacting with the AgentRunner and other AI services.
-4.  Monitoring: Tools for observing the deployed application and Supabase (potential need).
+Based on analysis of SEED Outline sections 1 pt I, 1 pt II, 2, 3, 4, 5, 6, and 7:
+
+1.  GitHub Interaction: Tools for accessing and potentially modifying project files. (Covered by existing GitHub MCP server)
+2.  Supabase Interaction: Specific tools for interacting with the self-hosted Supabase stack (Auth, Realtime, Storage, Edge Functions).
+3.  AI Agent Interaction: Tools for interacting with the AgentRunner and specific agents (via gRPC, GraphQL, WebSockets) and accessing related data from the database.
+4.  Direct Database Interaction (PostgreSQL): Tools for direct interaction using 'pg' for advanced operations, RLS, and managing project-specific tables.
+5.  System Command Execution: Ability to execute system commands. (Covered by existing 'execute_command' tool)
+6.  Monitoring and Error Tracking: Tools to interact with monitoring (Grafana), error tracking (Sentry), and access logs/metrics from the database.
+7.  File Storage Interaction: Tools to interact with the S3-compatible storage backend via Supabase Storage.
+8.  Secrets Management: Tools to interact with a dedicated secrets manager (e.g., HashiCorp Vault, cloud provider secrets manager).
+9.  Message Queue Interaction: Tools to interact with the chosen event bus (likely Redis Streams).
+10. External Vector Database Interaction (Potentially): Tools to interact with Pinecone/Weaviate if used.
+11. Cloud Service Interaction (Potentially): Tools to interact with cloud services like AWS.
+12. External LLM API Interaction (Potentially): Tools to interact with external LLM providers.
+13. CI/CD Integration: Tools to interact with a CI/CD pipeline.
