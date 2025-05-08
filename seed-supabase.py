@@ -30,3 +30,29 @@ async def select_data(table_name: str):
         return {"status": "success", "data": result.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/data/v1/insert/{table_name}")
+async def insert_data(table_name: str, request: Request):
+    data = await request.json()
+    try:
+        result = supabase.table(table_name).insert(data).execute()
+        return {"status": "success", "data": result.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/data/v1/update/{table_name}/{id}")
+async def update_data(table_name: str, id: str, request: Request):
+    data = await request.json()
+    try:
+        result = supabase.table(table_name).update(data).eq("id", id).execute()
+        return {"status": "success", "data": result.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/data/v1/delete/{table_name}/{id}")
+async def delete_data(table_name: str, id: str):
+    try:
+        result = supabase.table(table_name).delete().eq("id", id).execute()
+        return {"status": "success", "data": result.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
