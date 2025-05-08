@@ -22,3 +22,11 @@ async def ask_mcp(request: Request):
         return {"status": "success", "data": result.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/data/v1/select/{table_name}")
+async def select_data(table_name: str):
+    try:
+        result = supabase.table(table_name).select("*").execute()
+        return {"status": "success", "data": result.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
