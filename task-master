@@ -185,6 +185,47 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - For tables like `agent_memory_embeddings`, `interactions`, `agent_logs`, `system_logs`, `audit_logs`, which can grow very large, MCP tools should support efficient querying, possibly with pagination.
     - The `files` table metadata operations need to be coordinated with actual Supabase Storage blob operations.
 
+### Section 4: Access Layer & API Orchestration
+
+**1. Key Functionalities Identified:**
+    - **Unified API Gateway:** Using Caddy/Traefik/NGINX for routing, TLS, and initial JWT validation.
+    - **GraphQL API (Hasura):** Auto-generated schema, Realtime subscriptions, RLS enforcement via JWT claims. Custom resolvers/mutations via PG Functions or Hasura Actions.
+    - **gRPC API (Buf + Connect-Go/Twirp):** Low-latency, structured contracts for AI agents, mobile apps, internal services. REST/JSON interface via gRPC Gateway. JWT authentication and RLS context setting. Streaming for bulk data/logs.
+    - **WebSocket Layer (Supabase Realtime):** Realtime UI updates, agent console feeds, workflow event broadcasting. JWT authentication and RLS filtering.
+    - **Edge Functions (Supabase):** Stateless logic for webhook handlers, agent/embedding triggers, presigned URL generation, public booking endpoints. JWT authentication or API key for internal, strict security for public.
+    - **Standardized Error Structure & API Conventions:** Consistent error responses and conventions for pagination, filtering, sorting across API layers.
+    - **API Security (Zero-Trust):** JWT validation, RLS context setting, input validation, output encoding, rate limiting, session management.
+    - **Schema Governance & Versioning:** Strategies for gRPC, GraphQL, REST, Edge Functions, and JSON Schemas.
+    - **AI/Agent Interaction:** Agents prefer gRPC or Edge Functions. GraphQL for exploration. WebSockets for real-time triggers.
+    - **Monitoring Integration:** API layers capture metrics (latency, count, errors) for `system_metrics` or external systems.
+    - **GraphQL Query for Agent Capabilities:** `agentUICapabilities` query to fetch agent manifests from `agent_registry`.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
+        - `get_agent_registry_capabilities(agent_names_list)`: Fetches UI capabilities and other manifest data from `agent_registry` table to support the `agentUICapabilities` GraphQL query.
+        - (Reinforced) Generic query execution (`execute_pg_query`) will be heavily used by gRPC service implementations and custom GraphQL resolvers (if implemented as PG functions).
+        - (Reinforced) RLS policy management tools (`manage_pg_rls_policy`) are crucial for the security model described.
+
+    b. **Supabase Stack Interaction Tools (`tools/supabase/supabase_tools.py`)**
+        - `invoke_edge_function(function_name, payload)`: (Reinforced) Used for various tasks like webhook handling, agent triggers, presigned URL generation.
+        - `get_file_storage_url(action, tenant_id, file_path, content_type=None)`: (Reinforced) For generating presigned URLs, likely called by an Edge Function.
+
+    c. **Message Queue Interaction Tools (`tools/message_queues/message_queue_tools.py`)**
+        - (Reinforced) Edge Functions acting as webhook handlers or agent triggers might publish events to RabbitMQ using these tools.
+
+    d. **Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
+        - (Reinforced) Edge Functions or gRPC services might trigger workflows using these tools.
+
+    e. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)**
+        - (Reinforced) gRPC services and Edge Functions will be primary consumers of AI agent tools.
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - MCP tools must be designed to be easily callable from gRPC service implementations and Supabase Edge Functions.
+    - Tool functions should return data and errors in a way that aligns with the standardized API error structures and conventions (Section 4.7).
+    - Ensure MCP tools operate correctly within the described Zero-Trust security model, relying on JWT claims and RLS context set by the calling API layers.
+    - The implementation of `get_agent_registry_capabilities` needs to query the `agent_registry` table (schema details for this table might be in a later section or need to be assumed/defined).
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
@@ -240,6 +281,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `search_pg_vector_embeddings(tenant_id, query_vector, filters, top_k)`
     - `update_pg_vector_embedding_access(tenant_id, embedding_id, access_timestamp)`
     - `run_pg_vector_gc_job(tenant_id)`
+    - `get_agent_registry_capabilities(agent_names_list)`
     - Specific CRUD helpers for core tables (e.g., `create_lead`, `get_bookings_for_staff`, `log_interaction`, `log_agent_execution`, `log_billing_token_usage`, `get_file_metadata`, `create_file_metadata`, `delete_file_metadata`).
 
 **7. Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
@@ -263,7 +305,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_agent_log_details(tenant_id, agent_log_id)`
     - `submit_agent_log_feedback(tenant_id, agent_log_id, user_id, rating, comment)`
 
-*(Further tool categories and functions will be added as analysis progresses)*
+*(Further tool categories and functions will be added as analysis progresses. Existing tool functions are reconfirmed/reinforced by this section's analysis.)*
 
 ---
 *This document is actively being updated.*
