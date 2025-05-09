@@ -29,3 +29,20 @@ Based on comprehensive analysis of SEED Outline sections 1 pt I, 1 pt II, 2, 3, 
 *   Settings Management: Tools for configuring various business settings, including staff, services, AI agent parameters, and integrations.
 *   Public Portals (Booking & Lead Capture): Tools for managing the configuration and data related to the public booking and lead capture portals.
 *   Offline-First Sync: Tools related to managing the offline queue, conflict resolution, and monitoring sync status.
+
+---
+Progress & Next Steps (as of 2025-05-09 00:05 UTC):
+
+**Progress:**
+*   Completed initial framework setup for all required custom MCP tools within the `seed-mcp` repository.
+*   Created directory structures (`tools/<category>`) for each tool category.
+*   Added initial Python files (`<category>_tools.py`) with placeholder functions for each category.
+*   Created corresponding FastAPI router files (`seed-<category>.py`) for each category.
+*   Integrated all routers into `main.py` and updated the tool discovery endpoint (`/`) to list all placeholder tools.
+*   Initiated implementation phase by adding basic logic to Supabase and Database tool functions (`tools/supabase/supabase_tools.py`, `tools/databases/database_tools.py`).
+
+**Next Steps:**
+1.  Continue the implementation phase by adding detailed, secure logic to the placeholder functions within each `<category>_tools.py` file.
+2.  Prioritize implementation based on project needs and dependencies, starting with Supabase, AI Agents, and Databases.
+3.  Ensure all implementations adhere to data sovereignty principles and security best practices, especially regarding third-party interactions and handling of sensitive data.
+4.  Incorporate mechanisms for capturing relevant interaction data (securely and respecting privacy) to support AI agent training, as requested.
