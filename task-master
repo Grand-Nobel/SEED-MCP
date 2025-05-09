@@ -420,6 +420,82 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_tenant_subscription_details` would query the relevant billing/tenant management tables.
     - `update_service_runtime_setting` needs a mechanism for services to pick up configuration changes (e.g., polling, push notifications, restart).
 
+### Section 9: AI Memory & Embedding Vector Intelligence Layer
+
+**1. Key Functionalities Identified:**
+    - Embedding generation for various information sources using primary and secondary models.
+    - Storing and indexing embeddings in PostgreSQL with pgvector, including HNSW index management.
+    - Advanced metadata tagging (semantic, keyword, LLM-based) and management of a tag ontology.
+    - Vector search and retrieval via a "Vector Bridge" component, supporting hybrid search, filtering, and re-ranking.
+    - Context assembly for LLM consumption, including PII redaction and source attribution.
+    - Embedding lifecycle management (scoring, decay, culling/GC).
+    - Tenant isolation and security for embedding data.
+    - Embedding model governance (registry, versioning, backfilling, cost monitoring).
+    - Cross-agent embedding interoperability.
+    - AI ReflectionAgent integration for analyzing and improving embedding performance.
+    - Performance optimization and monitoring for the embedding layer.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Direct Database Interaction Tools (`tools/databases/database_tools.py`)** (Enhancements & New)
+        - `insert_pg_vector_embedding(...)`: (Reinforced) Heavily used.
+        - `search_pg_vector_embeddings(...)`: (Reinforced) Heavily used.
+        - `update_pg_vector_embedding_access(...)`: (Reinforced) For `last_accessed_at`, `retrieval_count`.
+        - `run_pg_vector_gc_job(tenant_id)`: (Reinforced) For culling.
+        - `manage_pg_hnsw_index_parameters(tenant_id, index_name, ef_search, ef_construction, m)`: To tune HNSW index parameters.
+        - `get_embedding_metadata(embedding_id)`: Fetches metadata for a specific embedding.
+        - `update_embedding_metadata(embedding_id, metadata_updates_json)`: Updates specific fields in an embedding's metadata.
+        - `get_embedding_model_details(model_name, model_version=None)`: Fetches details from `embedding_models` table.
+        - `list_active_embedding_models(capabilities_filter_array=None)`: Lists active models, optionally filtered by capabilities.
+        - `log_embedding_backfill_job(job_details_json)`: Logs status/progress of backfill jobs.
+        - `get_next_embedding_backfill_batch(job_id, batch_size)`: Fetches next batch for a backfill job.
+        - `update_embedding_backfill_job_status(job_id, status, processed_count, error_count)`: Updates backfill job status.
+        - `get_tenant_tag_definitions(tenant_id)`: Fetches custom tags for a tenant.
+        - `manage_tenant_tag_definition(tenant_id, action, tag_details_json)`: CRUD for tenant custom tags.
+        - `get_core_tag_taxonomy()`: Fetches the centrally managed tag taxonomy.
+        - `log_vector_retrieval_event(log_details_json)`: Logs details of a vector retrieval operation for analysis.
+        - `get_vector_retrieval_statistics(tenant_id, time_window_hours, filters_json)`: Aggregates retrieval stats.
+        - `get_embedding_outcome_correlations(tenant_id, time_window_hours, filters_json)`: Correlates embedding usage with agent outcomes.
+        - `get_embedding_quality_metrics(tenant_id, time_window_hours, filters_json)`: Fetches quality metrics.
+        - `get_model_drift_audit_logs(tenant_id, model_name, time_window_hours)`: Fetches logs from `model_drift_audit` table.
+        - `log_model_drift_audit_entry(entry_details_json)`: Logs an entry to `model_drift_audit`.
+        - `get_embedding_model_evaluation_results(model_id_or_name, dataset_id=None)`: Fetches evaluation results for models.
+        - `log_embedding_model_evaluation_result(result_details_json)`: Logs a model evaluation result.
+        - `get_agent_embedding_access_rules(agent_name_or_type)`: Fetches access rules for agents.
+        - `manage_agent_embedding_access_rule(action, rule_details_json)`: CRUD for agent access rules.
+
+    b. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)** (Enhancements)
+        - `generate_embedding_with_model(text_or_texts_array, model_name, model_version=None, tenant_id=None, priority='normal')`: Generates embeddings using a specified model (handles batching).
+        - `generate_semantic_tags_and_summary(text, model_name='claude-3-haiku', tenant_id=None)`: Uses an LLM for advanced tagging and summarization.
+        - `invoke_context_harmonizer_agent(conflicting_context_items_array, tenant_id)` (Potential - Mastery Suggestion): For resolving conflicting context.
+
+    c. **Message Queue Interaction Tools (`tools/message_queues/message_queue_tools.py`)** (Enhancements)
+        - `publish_to_embedding_queue(event_payload_dict, priority='normal')`: Publishes to specific embedding priority queues (e.g., `stream:embedding:urgent`).
+        - `consume_from_embedding_queue(priority='normal', consumer_group, consumer_name, count, block_ms)`: Consumes from embedding queues.
+        - `publish_to_embedding_dlq(failed_event_payload_dict, error_details_json)`: Publishes to `stream:embedding:dlq`.
+
+    d. **Vector Database Interaction Tools (`tools/vector_databases/vector_databases_tools.py`)** (Enhancements - if external DBs are used)
+        - `trigger_external_vector_reindex(database_type, collection_name, filters_json=None)`: For external vector DBs.
+        - `backup_external_vector_collection(database_type, collection_name, destination_uri)`: For external DBs.
+        - `restore_external_vector_collection(database_type, collection_name, source_uri)`: For external DBs.
+
+    e. **Settings Management Tools (`tools/settings_management/settings_management_tools.py`)** (Enhancements)
+        - `get_tenant_embedding_configuration(tenant_id)`: Fetches tenant-specific embedding settings (default model, secondary model rules, budget).
+        - `update_tenant_embedding_configuration(tenant_id, config_updates_json)`: Updates tenant embedding settings.
+        - `get_system_default_embedding_model_id()`: Gets the ID of the system's default embedding model.
+
+    f. **Operational Tools (`tools/operational_tools/operational_tools.py`)** (Enhancements)
+        - `get_embedding_worker_status(priority_filter=None)`: Gets status of embedding service workers.
+        - `scale_embedding_workers(priority, desired_count_delta)`: Adjusts the number of embedding workers for a given priority.
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - The Vector Bridge component is central and will consume many DB and AI Agent tools.
+    - Extensive use of JSONB for metadata requires careful schema design and query optimization.
+    - RLS policies for `agent_memory_embeddings` and related tables (`embedding_models`, `embedding_backfill_jobs`, etc.) are critical.
+    - The Embedding Service worker logic will be complex, involving calls to PII scanning, embedding models, and DB insertion with deduplication.
+    - ReflectionAgent integration requires tools to fetch aggregated performance data and potentially apply recommended changes to configurations or metadata.
+    - Cost monitoring and budget controls for embedding generation need robust implementation.
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
@@ -454,6 +530,9 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `dispatch_agent_task_to_runner(runner_details, execution_contract)`
     - `invoke_reflection_agent(trigger_payload)`
     - `trigger_llm_finetuning_pipeline(model_provider_details, dataset_reference, new_model_identifier)` (Potential)
+    - `generate_embedding_with_model(text_or_texts_array, model_name, model_version=None, tenant_id=None, priority='normal')`
+    - `generate_semantic_tags_and_summary(text, model_name='claude-3-haiku', tenant_id=None)`
+    - `invoke_context_harmonizer_agent(conflicting_context_items_array, tenant_id)` (Potential)
 
 **3. Offline-First Sync Tools (`tools/offline_sync/offline_sync_tools.py`)** (Potential)
     - `process_offline_mutation_batch(mutations)`
@@ -465,6 +544,9 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `publish_to_redis_stream(stream_name, event_payload_dict)`
     - `consume_from_redis_stream(stream_name, consumer_group, consumer_name, count, block_ms)`
     - `acknowledge_redis_stream_message(stream_name, consumer_group, message_id)`
+    - `publish_to_embedding_queue(event_payload_dict, priority='normal')`
+    - `consume_from_embedding_queue(priority='normal', consumer_group, consumer_name, count, block_ms)`
+    - `publish_to_embedding_dlq(failed_event_payload_dict, error_details_json)`
 
 **5. Caching Interaction Tools (`tools/caching/caching_tools.py`)**
     - `get_cached_item(tenant_id, cache_key)`
@@ -517,8 +599,29 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `set_encrypted_tenant_config_value(tenant_id, key_name, plain_value)` (Conceptual)
     - (Reinforced) `get_agent_definition`, `update_agent_definition`
     - Specific CRUD helpers for core tables (e.g., `create_lead`, `get_bookings_for_staff`, `log_interaction`, `log_agent_execution`, `log_billing_token_usage`, `get_file_metadata`, `create_file_metadata`, `delete_file_metadata`).
-    - `schedule_db_task(tenant_id, cron_expression, task_name, task_sql_or_function_name, task_parameters_json=None)`: Allows agents or system components to schedule recurring or future database tasks using `pg_cron`.
-    - `get_tenant_subscription_details(tenant_id)` (Potential - if OPA needs this for API policy): Fetches tenant subscription tier or specific entitlements for OPA policy decisions.
+    - `schedule_db_task(tenant_id, cron_expression, task_name, task_sql_or_function_name, task_parameters_json=None)`
+    - `get_tenant_subscription_details(tenant_id)` (Potential)
+    - `manage_pg_hnsw_index_parameters(tenant_id, index_name, ef_search, ef_construction, m)`
+    - `get_embedding_metadata(embedding_id)`
+    - `update_embedding_metadata(embedding_id, metadata_updates_json)`
+    - `get_embedding_model_details(model_name, model_version=None)`
+    - `list_active_embedding_models(capabilities_filter_array=None)`
+    - `log_embedding_backfill_job(job_details_json)`
+    - `get_next_embedding_backfill_batch(job_id, batch_size)`
+    - `update_embedding_backfill_job_status(job_id, status, processed_count, error_count)`
+    - `get_tenant_tag_definitions(tenant_id)`
+    - `manage_tenant_tag_definition(tenant_id, action, tag_details_json)`
+    - `get_core_tag_taxonomy()`
+    - `log_vector_retrieval_event(log_details_json)`
+    - `get_vector_retrieval_statistics(tenant_id, time_window_hours, filters_json)`
+    - `get_embedding_outcome_correlations(tenant_id, time_window_hours, filters_json)`
+    - `get_embedding_quality_metrics(tenant_id, time_window_hours, filters_json)`
+    - `get_model_drift_audit_logs(tenant_id, model_name, time_window_hours)`
+    - `log_model_drift_audit_entry(entry_details_json)`
+    - `get_embedding_model_evaluation_results(model_id_or_name, dataset_id=None)`
+    - `log_embedding_model_evaluation_result(result_details_json)`
+    - `get_agent_embedding_access_rules(agent_name_or_type)`
+    - `manage_agent_embedding_access_rule(action, rule_details_json)`
 
 **7. Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
     - `create_workflow_definition(tenant_id, name, description, trigger_type, trigger_config, structure_json)`
@@ -541,7 +644,10 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - (Reinforced) CRUD for `agent_learning_config`, `agent_prompt_templates`.
     - (Reinforced) Managing `tenant_config` (encrypted per-tenant external API keys).
     - (Reinforced) Managing `data_classification_registry` (if stored as a configurable table).
-    - `update_service_runtime_setting(tenant_id_or_global, service_name, setting_key, setting_value)`: Allows dynamic updates to specific runtime settings of a service, potentially used by self-healing or admin actions.
+    - `update_service_runtime_setting(tenant_id_or_global, service_name, setting_key, setting_value)`
+    - `get_tenant_embedding_configuration(tenant_id)`
+    - `update_tenant_embedding_configuration(tenant_id, config_updates_json)`
+    - `get_system_default_embedding_model_id()`
 
 **9. Agent Log Review Tools (`tools/agent_log_review/agent_log_review_tools.py`)**
     - `query_agent_logs(tenant_id, filters)`
@@ -553,24 +659,29 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `search_vectors(...)` (Note: pgvector specific version is in Database tools, this is for external DBs if any, used by Vector Bridge)
     - `manage_collection(...)` (For external DBs)
     - `trigger_vector_reindex(database_type, collection_name_or_index_name)`
+    - `trigger_external_vector_reindex(database_type, collection_name, filters_json=None)`
+    - `backup_external_vector_collection(database_type, collection_name, destination_uri)`
+    - `restore_external_vector_collection(database_type, collection_name, source_uri)`
 
 **11. Cloud Service Interaction Tools (`tools/cloud_services/aws_tools.py` or similar)**
     - `aggregate_with_nitro_enclave(data_to_aggregate, aggregation_config)` (If AWS Nitro Enclaves are used)
 
-**12. Secrets Management Tools (NEW - `tools/secrets_management/secrets_manager_tools.py` - if external)**
+**12. Secrets Management Tools (`tools/secrets_management/secrets_manager_tools.py` - if external)**
     - `get_external_secret(secret_path_or_name)`
     - `set_external_secret(secret_path_or_name, secret_value)`
     - `manage_secret_rotation_policy(secret_name, policy_details)`
 
 **13. Feature Flag Management Tools (`tools/feature_flags/feature_flag_tools.py`)**
-    - `is_feature_flag_enabled(tenant_id_or_global, user_id_or_context, flag_name)`: Checks if a feature flag is active for a given context (tenant, user, or global).
-    - `get_feature_flag_variant(tenant_id_or_global, user_id_or_context, flag_name)`: Gets the specific variant (e.g., 'A', 'B', 'control') of a feature flag.
-    - `get_all_feature_flags_for_context(tenant_id_or_global, user_id_or_context)`: Retrieves all applicable feature flags and their states/variants for a given context.
+    - `is_feature_flag_enabled(tenant_id_or_global, user_id_or_context, flag_name)`
+    - `get_feature_flag_variant(tenant_id_or_global, user_id_or_context, flag_name)`
+    - `get_all_feature_flags_for_context(tenant_id_or_global, user_id_or_context)`
 
 **14. Operational Tools (`tools/operational_tools/operational_tools.py`)**
-    - `get_service_status(tenant_id_or_global, service_name_or_group, instance_id=None)`: Retrieves status of specified services or agent runners.
-    - `restart_service_instance(tenant_id_or_global, service_name_or_group, instance_id=None)`: Initiates a restart of specified service instances or agent runners (e.g., for self-healing).
-    - `trigger_canary_analysis(service_name, new_version_details, baseline_version_details)` (Potential - if CI/CD needs to trigger this programmatically via MCP).
+    - `get_service_status(tenant_id_or_global, service_name_or_group, instance_id=None)`
+    - `restart_service_instance(tenant_id_or_global, service_name_or_group, instance_id=None)`
+    - `trigger_canary_analysis(service_name, new_version_details, baseline_version_details)` (Potential)
+    - `get_embedding_worker_status(priority_filter=None)`
+    - `scale_embedding_workers(priority, desired_count_delta)`
 
 *(Further tool categories and functions will be added as analysis progresses.)*
 
