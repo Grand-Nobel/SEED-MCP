@@ -1,1 +1,8 @@
-fastapi\nuvicorn[standard]\nsupabase\npydantic\npython-dotenv\n# Add other dependencies as needed, e.g.:\n# aio_pika (for RabbitMQ if used later)\n# redis (for Redis if used later)\n
+fastapi
+uvicorn[standard]
+supabase
+pydantic
+python-dotenv
+# Add other dependencies as needed, e.g.:
+# aio_pika (for RabbitMQ if used later)
+# redis (for Redis if used later)
