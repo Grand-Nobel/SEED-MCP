@@ -328,6 +328,58 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - The ReflectionAgent (itself an AI agent) will be a consumer of many DB and AI Agent tools.
     - The admin approval workflow for agent evolution will orchestrate calls to various MCP tools.
 
+### Section 7: Multi-Tenancy, Security & Compliance
+
+**1. Key Functionalities Identified:**
+    - **Tenant Isolation:** RLS in PostgreSQL, Vector DB namespacing/filtering, tenant ID in agent logs & event bus payloads.
+    - **RBAC:** Admin, Manager, Staff, Support Agent, AI Agent roles; enforcement via JWT & RLS.
+    - **Authentication & Token Scoping:** Supabase Auth, JWT custom claims (`tenant_id`, `role`), agent-specific scoped JWTs.
+    - **Secure Config Management:** External Secrets Manager, encrypted `tenant_config` table for per-tenant external keys, RLS for `agent_learning_config` & `agent_prompt_templates`. `pgcrypto` for DB field encryption.
+    - **Audit Logging:** `agent_logs`, `system_logs`, `audit_logs` with detailed fields and retention policies.
+    - **Data Residency & Compliance (GDPR, CCPA, SOC 2, HIPAA optional):** Regional deployment, LLM DPA registry, Compliance Escalation Mode.
+    - **PII Handling & Encryption:** PII Classification Registry (`data_classification_registry`), encryption at rest & in transit, PII masking/redaction in logs & LLM interactions.
+    - **Zero-Trust Architecture:** Principles like explicit verification, least privilege, scoped execution.
+    - **Admin Controls:** Approval workflows for config changes, sensitive log access, user management, MFA.
+    - **Security Testing:** Red teaming for LLMs, infrastructure penetration testing, session management security (token revocation list).
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
+        - (Reinforced) `manage_pg_rls_policy` and ensuring queries respect RLS context.
+        - `get_encrypted_db_field(tenant_id, table, field, record_id)` (Conceptual - if not transparent via pgcrypto & user context).
+        - `set_encrypted_db_field(tenant_id, table, field, record_id, plain_value)` (Conceptual - if not transparent).
+        - `log_audit_trail_event(tenant_id, user_id, session_id, action_enum, entity_type, entity_id, changed_fields_json, ip_address, user_agent, status_enum, failure_reason)`: For `audit_logs`.
+        - `get_pii_classification(field_name_or_path)`: Queries `data_classification_registry`.
+        - `manage_pii_classification_entry(action, entry_details)`: CRUD for `data_classification_registry`.
+        - `add_jwt_to_revocation_list(jti, expiry_timestamp)`: If DB-based JWT revocation is used.
+        - `is_jwt_revoked(jti)`: Checks revocation list.
+
+    b. **Supabase Stack Interaction Tools (`tools/supabase/supabase_tools.py`)**
+        - `manage_user_mfa_status(user_id, action_enable_disable)`: Interacts with Supabase Auth for MFA.
+        - `revoke_supabase_user_session(user_id, session_id_or_all)`: If Supabase Auth provides such an API.
+        - **Secrets Management (if using Supabase Vault, otherwise new category):**
+            - `get_app_secret(secret_name)`
+            - `set_app_secret(secret_name, secret_value)`
+
+    c. **Settings Management Tools (`tools/settings_management/settings_management_tools.py`)**
+        - (Reinforced) Managing `tenant_config` (encrypted per-tenant external API keys).
+        - (Reinforced) Managing `data_classification_registry` (if stored as a configurable table).
+
+    d. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)**
+        - (Reinforced) `dispatch_agent_task_to_runner` must ensure it creates/passes appropriately scoped, short-lived JWTs for agent runners, incorporating `tenant_id` and a minimal agent-specific role. This might involve a helper function or service for minting these scoped tokens.
+
+    e. **Secrets Management Tools (NEW - `tools/secrets_management/secrets_manager_tools.py` - if external, e.g., HashiCorp Vault)**
+        - `get_external_secret(secret_path_or_name)`
+        - `set_external_secret(secret_path_or_name, secret_value)`
+        - `manage_secret_rotation_policy(secret_name, policy_details)`
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - RLS policy enforcement is paramount and relies on correct session context (`app.current_tenant_id`, `app.current_role`) being set by API layers before MCP tools (especially DB tools) are called.
+    - Encryption/decryption logic for sensitive DB fields needs careful implementation if not handled transparently by `pgcrypto` at the connection/user level.
+    - The PII Classification Registry is a key component; MCP tools will be needed to manage and query it.
+    - A robust solution for JWT revocation (e.g., Redis-based list, DB table) needs to be implemented and checked by auth middleware, potentially with MCP tool support for managing the list.
+    - If an external secrets manager like HashiCorp Vault is used, a new MCP tool category will be required to interface with it.
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
