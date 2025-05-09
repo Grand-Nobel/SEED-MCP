@@ -496,6 +496,58 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - ReflectionAgent integration requires tools to fetch aggregated performance data and potentially apply recommended changes to configurations or metadata.
     - Cost monitoring and budget controls for embedding generation need robust implementation.
 
+### Section 10.1: Frontend Architecture Overview
+
+**1. Key Functionalities Identified:**
+    - Fetching translations from Supabase, with caching in IndexedDB.
+    - Client-side NLP for command palette, with server-side fallback RPC.
+    - Mobile app token rotation and admin notifications via Supabase RPCs and background tasks.
+    - Secure proxy for Speech-to-Text (STT) API key.
+    - Monitoring cron job status from `cron.job_run_details`.
+    - Batch insertion of dashboard operations with conflict resolution.
+    - Management of dashboard partitions and S3 backups for archived operations.
+    - Logging errors from cron jobs, partition management, and S3 backups to dedicated tables and Sentry.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Supabase Stack Interaction Tools (`tools/supabase/supabase_tools.py`)** (Enhancements & New)
+        - `get_translations(locale, namespace)`: Fetches translations for a given locale and namespace.
+        - `rpc_call(function_name, params_dict, tenant_id=None)`: Generic Supabase RPC call. Used for:
+            - `fetch_commands` (server-side command palette fallback)
+            - `rotate_token` (mobile token rotation)
+            - `notify_admin` (mobile admin notification)
+            - `execute_action` (dashboard operations)
+            - `undo_action` (dashboard operations)
+            - `batch_insert_dashboard_ops` (dashboard operations)
+            - `manage_dashboard_partitions` (DB maintenance)
+            - `archive_dashboard_operations` (DB maintenance)
+            - `backup_dashboard_archive` (DB maintenance to S3)
+            - `cron_monitoring` (DB maintenance)
+        - `get_cron_job_run_details(limit=10, job_name_filter=None, status_filter=None)`: Fetches details from `cron.job_run_details`.
+        - `invoke_supabase_function(function_name, body_payload, headers_dict=None)`: Used for `stt-proxy`.
+
+    b. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)** (Enhancements)
+        - `get_nlp_command_suggestions(query_text, user_id, tenant_id, client_side_model_available=True)`: (Conceptual) Could be used by server-side `fetch_commands` if it involves more complex NLP than simple DB lookups.
+
+    c. **Caching Interaction Tools (`tools/caching/caching_tools.py`)** (Enhancements)
+        - `get_cached_translations(locale, namespace)`: (Conceptual) If server-side caching for translations is desired beyond client-side.
+        - `set_cached_translations(locale, namespace, translations_data, ttl_seconds)`: (Conceptual)
+
+    d. **Cloud Service Interaction Tools (`tools/cloud_services/aws_tools.py` or similar)** (Enhancements)
+        - `upload_to_s3(bucket_name, key_name, body_content, content_type='application/json')`: Used by `backup_dashboard_archive` RPC.
+
+    e. **Direct Database Interaction Tools (`tools/databases/database_tools.py`)** (Enhancements)
+        - `log_sentry_exception_db(error_message, context_json)`: (Conceptual) For logging Sentry-like errors to a DB table if direct Sentry SDK use isn't feasible from MCP.
+        - `log_partition_error_db(error_message, partition_name, modulus, remainder)`: Logs errors from `manage_dashboard_partitions`.
+        - `log_backup_error_db(error_message, bucket_name, key_name)`: Logs errors from `backup_dashboard_archive`.
+        - `log_cron_error_db(job_id, job_name, error_message)`: Logs errors from `cron_monitoring`.
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - The `rpc_call` tool needs to be robust, handling various parameter types and securely passing tenant/user context if the RPCs themselves don't handle it via session variables set by Supabase.
+    - For `stt-proxy` via `invoke_supabase_function`, the MCP tool acts as a pass-through, but ensures proper authentication to the Supabase function.
+    - Error logging tools (`log_partition_error_db`, etc.) provide a centralized way for DB functions (which might not have direct Sentry access) to report issues that MCP can then relay or store.
+    - Translation fetching and caching tools would abstract the Supabase queries and potential server-side caching layers.
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
@@ -518,6 +570,10 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `set_app_secret(secret_name, secret_value)` (If using Supabase Vault)
     - `get_tenant_icon_set_config(tenant_id)` (Potential)
     - `get_tenant_grid_config(tenant_id)` (Potential)
+    - `get_translations(locale, namespace)`
+    - `rpc_call(function_name, params_dict, tenant_id=None)`
+    - `get_cron_job_run_details(limit=10, job_name_filter=None, status_filter=None)`
+    - `invoke_supabase_function(function_name, body_payload, headers_dict=None)`
 
 **2. AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)**
     - `get_ai_input_suggestions(tenant_id, current_input_context)`
@@ -533,6 +589,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `generate_embedding_with_model(text_or_texts_array, model_name, model_version=None, tenant_id=None, priority='normal')`
     - `generate_semantic_tags_and_summary(text, model_name='claude-3-haiku', tenant_id=None)`
     - `invoke_context_harmonizer_agent(conflicting_context_items_array, tenant_id)` (Potential)
+    - `get_nlp_command_suggestions(query_text, user_id, tenant_id, client_side_model_available=True)` (Conceptual)
 
 **3. Offline-First Sync Tools (`tools/offline_sync/offline_sync_tools.py`)** (Potential)
     - `process_offline_mutation_batch(mutations)`
@@ -552,6 +609,8 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_cached_item(tenant_id, cache_key)`
     - `set_cached_item(tenant_id, cache_key, item_data, custom_ttl=None)`
     - `invalidate_cache_key(tenant_id, cache_key_pattern)`
+    - `get_cached_translations(locale, namespace)` (Conceptual)
+    - `set_cached_translations(locale, namespace, translations_data, ttl_seconds)` (Conceptual)
 
 **6. Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
     - `execute_pg_query(tenant_id, query_text, params, use_replica=True)`
@@ -622,6 +681,10 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `log_embedding_model_evaluation_result(result_details_json)`
     - `get_agent_embedding_access_rules(agent_name_or_type)`
     - `manage_agent_embedding_access_rule(action, rule_details_json)`
+    - `log_sentry_exception_db(error_message, context_json)` (Conceptual)
+    - `log_partition_error_db(error_message, partition_name, modulus, remainder)`
+    - `log_backup_error_db(error_message, bucket_name, key_name)`
+    - `log_cron_error_db(job_id, job_name, error_message)`
 
 **7. Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
     - `create_workflow_definition(tenant_id, name, description, trigger_type, trigger_config, structure_json)`
@@ -665,6 +728,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
 
 **11. Cloud Service Interaction Tools (`tools/cloud_services/aws_tools.py` or similar)**
     - `aggregate_with_nitro_enclave(data_to_aggregate, aggregation_config)` (If AWS Nitro Enclaves are used)
+    - `upload_to_s3(bucket_name, key_name, body_content, content_type='application/json')`
 
 **12. Secrets Management Tools (`tools/secrets_management/secrets_manager_tools.py` - if external)**
     - `get_external_secret(secret_path_or_name)`
