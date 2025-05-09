@@ -226,6 +226,61 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - Ensure MCP tools operate correctly within the described Zero-Trust security model, relying on JWT claims and RLS context set by the calling API layers.
     - The implementation of `get_agent_registry_capabilities` needs to query the `agent_registry` table (schema details for this table might be in a later section or need to be assumed/defined).
 
+### Section 5: Execution Pipeline & Orchestration Engine
+
+**1. Key Functionalities Identified:**
+    - **Event Bus (Redis Streams):** Standardized event publishing and consumption with persistence, consumer groups, and priority channels.
+    - **Orchestrator Engine:** Consumes events, uses routing rules (from `event_routing_rules` table) to dispatch tasks to workflows or AI agents. Manages workflow state.
+    - **Vector Bridge:** Retrieves context from vector stores (pgvector, Pinecone, Weaviate) to augment agent input payloads.
+    - **Agent Runner Pool Coordination:** Uses `agent_registry` table for runner discovery and load balancing. Standardized agent execution contract.
+    - **Agent Coordination Protocol (ACP):** Hybrid policy for conflict resolution using `hybrid_policy_configs` and logging to `acp_ledger`.
+    - **Vector Index Tuning:** Bayesian optimization for HNSW parameters (`ef_search`, `m`), re-indexing based on data drift. Storing configs in `vector_policy_configs`.
+    - **Federated Learning:** Differential privacy for model updates, secure aggregation (AWS Nitro Enclaves), robust algorithms, personalization. Uses `priority_models` and `global_priority_models` tables.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Message Queue Interaction Tools (`tools/message_queues/message_queue_tools.py`)**
+        - `publish_to_redis_stream(stream_name, event_payload_dict)`: Publishes a standardized event.
+        - `consume_from_redis_stream(stream_name, consumer_group, consumer_name, count, block_ms)`: Consumes events.
+        - `acknowledge_redis_stream_message(stream_name, consumer_group, message_id)`: Acknowledges processed message.
+        - (RabbitMQ functions remain if used for other purposes).
+
+    b. **Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
+        - `get_event_routing_rules(event_type, source_criteria)`: Fetches rules from `event_routing_rules`.
+        - `get_agent_runner_details(agent_type_filter)`: Queries `agent_registry`.
+        - `register_agent_runner_instance(runner_details)`: Adds/updates runner in `agent_registry`.
+        - `get_acp_hybrid_policy_config(tenant_id)`: Fetches from `hybrid_policy_configs`.
+        - `log_acp_ledger_entry(event_id, tenant_id, agent_id, task_id, resolution, explanation_json)`: Inserts into `acp_ledger`.
+        - `get_vector_policy_config(tenant_id)`: Fetches from `vector_policy_configs` (new table).
+        - `update_vector_policy_config(tenant_id, ef_search, m)`: Updates `vector_policy_configs`.
+        - `get_priority_model_weight(tenant_id, agent_id, task_type)`: From `priority_models`.
+        - `update_priority_model_weight(tenant_id, agent_id, task_type, weight)`: To `priority_models`.
+        - `get_all_priority_models_for_aggregation()`: Fetches all tenant models.
+        - `store_global_priority_model_weights(model_id, agent_id, task_type, weight)`: To `global_priority_models`.
+        - (Reinforced) `search_pg_vector_embeddings` for Vector Bridge.
+        - (Reinforced) CRUD for `workflow_runs`, `steps_state`.
+
+    c. **Vector Database Interaction Tools (`tools/vector_databases/vector_databases_tools.py`)**
+        - (Reinforced) `search_vectors` (pgvector, Pinecone, Weaviate) used by Vector Bridge.
+        - `trigger_vector_reindex(database_type, collection_name_or_index_name)`: For data drift.
+
+    d. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)**
+        - `dispatch_agent_task_to_runner(runner_details, execution_contract)`: Sends task to a specific agent runner.
+        - (Potentially) Specialized agent calls for Bayesian optimization or federated learning steps if these are managed by dedicated AI agents.
+
+    e. **Settings Management Tools (`tools/settings_management/settings_management_tools.py`)**
+        - (Reinforced) Managing configurations for ACP policies, vector tuning, federated learning if stored centrally.
+
+    f. **Cloud Service Interaction Tools (NEW - `tools/cloud_services/aws_tools.py` or similar)**
+        - `aggregate_with_nitro_enclave(data_to_aggregate, aggregation_config)`: For secure aggregation in federated learning.
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - Implement robust Redis Streams interaction logic in `message_queue_tools.py`.
+    - Define schemas and implement CRUD/query functions for new tables: `event_routing_rules`, `agent_registry`, `hybrid_policy_configs`, `acp_ledger`, `vector_policy_configs` (new), `priority_models`, `global_priority_models`.
+    - The Vector Bridge logic will heavily rely on `vector_database_tools.py` and `database_tools.py`.
+    - Orchestrator logic will use Message Queue, Database, AI Agent, and Workflow tools extensively.
+    - If AWS Nitro Enclaves are used, a new tool category for AWS interactions will be needed.
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
@@ -253,15 +308,18 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `predict_cache_ttl(tenant_id, cache_key_details)`
     - `predict_hnsw_params(tenant_id, table_name)`
     - `predict_service_config(tenant_id, service_name, current_config)`
+    - `dispatch_agent_task_to_runner(runner_details, execution_contract)`
 
 **3. Offline-First Sync Tools (`tools/offline_sync/offline_sync_tools.py`)** (Potential)
     - `process_offline_mutation_batch(mutations)`
 
 **4. Message Queue Interaction Tools (`tools/message_queues/message_queue_tools.py`)**
-    - `initialize_tenant_rabbitmq_queue(tenant_id)`
-    - `publish_to_rabbitmq_queue(tenant_id, event_payload, urgency_level)`
-    - `get_rabbitmq_queue_depth(tenant_id, queue_name)`
-    - `process_rabbitmq_batch(tenant_id)` (Potential internal worker function)
+    - `initialize_tenant_rabbitmq_queue(tenant_id)` (If RabbitMQ still used for specific parts)
+    - `publish_to_rabbitmq_queue(tenant_id, event_payload, urgency_level)` (If RabbitMQ still used)
+    - `get_rabbitmq_queue_depth(tenant_id, queue_name)` (If RabbitMQ still used)
+    - `publish_to_redis_stream(stream_name, event_payload_dict)`
+    - `consume_from_redis_stream(stream_name, consumer_group, consumer_name, count, block_ms)`
+    - `acknowledge_redis_stream_message(stream_name, consumer_group, message_id)`
 
 **5. Caching Interaction Tools (`tools/caching/caching_tools.py`)**
     - `get_cached_item(tenant_id, cache_key)`
@@ -282,6 +340,17 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `update_pg_vector_embedding_access(tenant_id, embedding_id, access_timestamp)`
     - `run_pg_vector_gc_job(tenant_id)`
     - `get_agent_registry_capabilities(agent_names_list)`
+    - `get_event_routing_rules(event_type, source_criteria)`
+    - `get_agent_runner_details(agent_type_filter)`
+    - `register_agent_runner_instance(runner_details)`
+    - `get_acp_hybrid_policy_config(tenant_id)`
+    - `log_acp_ledger_entry(event_id, tenant_id, agent_id, task_id, resolution, explanation_json)`
+    - `get_vector_policy_config(tenant_id)`
+    - `update_vector_policy_config(tenant_id, ef_search, m)`
+    - `get_priority_model_weight(tenant_id, agent_id, task_type)`
+    - `update_priority_model_weight(tenant_id, agent_id, task_type, weight)`
+    - `get_all_priority_models_for_aggregation()`
+    - `store_global_priority_model_weights(model_id, agent_id, task_type, weight)`
     - Specific CRUD helpers for core tables (e.g., `create_lead`, `get_bookings_for_staff`, `log_interaction`, `log_agent_execution`, `log_billing_token_usage`, `get_file_metadata`, `create_file_metadata`, `delete_file_metadata`).
 
 **7. Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
@@ -299,13 +368,23 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `manage_json_schema(action, schema_name, version, schema_definition_json)`
     - `get_tenant_settings(tenant_id)`
     - `update_tenant_settings(tenant_id, settings_payload)`
+    - (Reinforced) Functions for ACP, vector tuning, federated learning configs.
 
 **9. Agent Log Review Tools (`tools/agent_log_review/agent_log_review_tools.py`)**
     - `query_agent_logs(tenant_id, filters)`
     - `get_agent_log_details(tenant_id, agent_log_id)`
     - `submit_agent_log_feedback(tenant_id, agent_log_id, user_id, rating, comment)`
 
-*(Further tool categories and functions will be added as analysis progresses. Existing tool functions are reconfirmed/reinforced by this section's analysis.)*
+**10. Vector Database Interaction Tools (`tools/vector_databases/vector_databases_tools.py`)**
+    - `insert_vectors(...)` (Note: pgvector specific version is in Database tools, this is for external DBs if any)
+    - `search_vectors(...)` (Note: pgvector specific version is in Database tools, this is for external DBs if any, used by Vector Bridge)
+    - `manage_collection(...)` (For external DBs)
+    - `trigger_vector_reindex(database_type, collection_name_or_index_name)`
+
+**11. Cloud Service Interaction Tools (NEW - `tools/cloud_services/aws_tools.py` or similar)**
+    - `aggregate_with_nitro_enclave(data_to_aggregate, aggregation_config)` (If AWS Nitro Enclaves are used)
+
+*(Further tool categories and functions will be added as analysis progresses.)*
 
 ---
 *This document is actively being updated.*
