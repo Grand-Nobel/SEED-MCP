@@ -1,1 +1,44 @@
-from fastapi import FastAPI\nimport uvicorn\n\n# Assuming seed_supabase.py is in the same directory (root of the project)\n# and contains a router instance named 'router'\nimport seed_supabase \n\n# If you have other tool servers, you would import their routers as well\n# For example:\n# import seed_ai_agents\n# import seed_file_storage\n\napp = FastAPI(\n    title=\"SEED-MCP Aggregated Server\",\n    description=\"Development server aggregating various MCP tool servers.\",\n    version=\"0.1.0\"\n)\n\n# Include the Supabase router\n# All routes from seed_supabase.py will be prefixed with /supabase\napp.include_router(seed_supabase.router, prefix=\"/supabase\", tags=["Supabase Tools"])\n\n# Include other routers here as they are developed:\n# app.include_router(seed_ai_agents.router, prefix=\"/ai\", tags=["AI Agent Tools"])\n# app.include_router(seed_file_storage.router, prefix=\"/storage-tools\", tags=["File Storage Tools"])\n# ... and so on for other tool categories from task-master\n\n@app.get("/", tags=["Root"])\nasync def read_root():\n    return {\n        "message": "SEED-MCP Aggregated Server is running.",\n        "docs_url": "/docs",\n        "redoc_url": "/redoc",\n        "available_tool_groups": {\n            "supabase_tools": "/supabase/docs"\n            # Add other tool groups here as they are included\n        }\n    }\n\nif __name__ == \"__main__\":\n    # This is for local development running this main.py directly\n    # For deployment (e.g., with Fly.io), Uvicorn will typically be run by the process manager\n    # as configured in fly.toml or a Procfile.\n    uvicorn.run(app, host=\"0.0.0.0\", port=8000)\n
+from fastapi import FastAPI
+import uvicorn
+
+# Assuming seed_supabase.py is in the same directory (root of the project)
+# and contains a router instance named 'router'
+import seed_supabase
+
+# If you have other tool servers, you would import their routers as well
+# For example:
+# import seed_ai_agents
+# import seed_file_storage
+
+app = FastAPI(
+    title="SEED-MCP Aggregated Server",
+    description="Development server aggregating various MCP tool servers.",
+    version="0.1.0"
+)
+
+# Include the Supabase router
+# All routes from seed_supabase.py will be prefixed with /supabase
+app.include_router(seed_supabase.router, prefix="/supabase", tags=["Supabase Tools"])
+
+# Include other routers here as they are developed:
+# app.include_router(seed_ai_agents.router, prefix="/ai", tags=["AI Agent Tools"])
+# app.include_router(seed_file_storage.router, prefix="/storage-tools", tags=["File Storage Tools"])
+# ... and so on for other tool categories from task-master
+
+@app.get("/", tags=["Root"])
+async def read_root():
+    return {
+        "message": "SEED-MCP Aggregated Server is running.",
+        "docs_url": "/docs",
+        "redoc_url": "/redoc",
+        "available_tool_groups": {
+            "supabase_tools": "/supabase/docs"
+            # Add other tool groups here as they are included
+        }
+    }
+
+if __name__ == "__main__":
+    # This is for local development running this main.py directly
+    # For deployment (e.g., with Fly.io), Uvicorn will typically be run by the process manager
+    # as configured in fly.toml or a Procfile (which uses Dockerfile CMD).
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
