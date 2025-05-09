@@ -600,6 +600,11 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
             - `prompt_debug_logs`, `action_simulations`, `agent_decision_logs` (admin/debug UIs)
             - `user_permissions` (filter-suggestions function)
             - `user_preferences` (filter-suggestions function, adaptive frequency)
+            - `agent_collaborations`
+            - `offline_mutations` (poison pill resolver)
+            - `onboarding_steps`
+            - `tenant_config` (lead form, if not purely AppConfig)
+            - `experiment_assignments`
         - `insert_table_data(table_name, data_dict_or_list, tenant_id=None, user_id=None)`: Generic table insert. Used for:
             - `workmanager_metrics` (mobile background tasks)
             - `workmanager_alerts` (mobile background tasks)
@@ -609,18 +614,29 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
             - `ui_commands` (if not via RPC)
             - `prompt_debug_logs`, `action_simulations`, `agent_decision_logs`
             - `offline_mutations` (poison pill logging)
+            - `agent_collaborations` (feedback implicitly via update)
+            - `user_agent_preferences` (via upsert)
+            - `usability_metrics`
+            - `experiment_assignments`
+            - `batch_operations_log` (lead/booking form partial failures)
         - `update_table_data(table_name, data_updates_dict, filters_dict, tenant_id=None, user_id=None)`: Generic table update. Used for:
             - `agent_suggestions` (approve, adjust frequency)
             - `user_preferences` (suggestion frequency)
             - `ui_commands` (status update)
             - `ui_adaptations` (mark applied)
             - `agent_decision_logs` (feedback update)
-        - `delete_table_data(table_name, filters_dict, tenant_id=None, user_id=None)`: Generic table delete.
+            - `agent_collaborations` (feedback update)
+            - `user_agent_preferences` (via upsert)
+            - `offline_mutations` (status update after resolution)
+        - `delete_table_data(table_name, filters_dict, tenant_id=None, user_id=None)`: Generic table delete. Used for:
             - `action_log` (cleanup cron)
+            - `offline_mutations` (after successful resolution)
 
     b. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)** (Enhancements)
         - `get_nlp_predictions(text_input, model_name='intent-classifier', tokenizer_url=None, model_url=None, tenant_id=None, user_id=None)`: (Conceptual) For server-side NLP if client-side fails or for more complex models.
         - `get_predictive_navigation_items(user_id, tenant_id, current_context_json, top_n=3)`: (Conceptual) For web sidebar predictive prefetch.
+        - `get_predictive_prefill_suggestions(tenant_id, form_type, current_form_data_json)`: (Conceptual) For lead form prefill.
+        - `run_agent_action_simulation(agent_id, action_type, payload_json, user_id, tenant_id)`: (Conceptual) For action simulator RPC.
 
     c. **Caching Interaction Tools (`tools/caching/caching_tools.py`)** (Enhancements)
         - `get_cached_nav_items(user_id)`: (Conceptual) Server-side cache for `nav_items`.
@@ -629,17 +645,26 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
         - `set_cached_kpis_data(tenant_id, time_range, kpi_data, ttl_seconds)`: (Conceptual)
         - `get_cached_action_validation(action_id, trace_id)`: For `validateAgentAction`.
         - `set_cached_action_validation(action_id, trace_id, validation_result_json, ttl_seconds)`: For `validateAgentAction`.
+        - `get_cached_nlp_context(user_id)`: For lead form.
+        - `set_cached_nlp_context(user_id, context_data_json, ttl_seconds)`: For lead form.
+        - `get_cached_suggestions(tenant_id, suggestion_key)`: For lead form.
+        - `set_cached_suggestions(tenant_id, suggestion_key, suggestions_data_json, ttl_seconds)`: For lead form.
+        - `check_idempotency_key(key)`: For lead/booking creation.
+        - `store_idempotency_key(key, ttl_seconds)`: For lead/booking creation.
 
     d. **Message Queue Interaction Tools (`tools/message_queues/message_queue_tools.py`)** (Enhancements)
         - `publish_to_ui_metrics_queue(metrics_payload_list)`: For UI performance profiling.
 
+    e. **Configuration Management Tools (NEW - `tools/config_management/config_management_tools.py`)**
+        - `get_app_config_value(config_path_string)`: e.g., `agents.leadAssistant.debounceTime`.
+        - `get_tenant_specific_config(tenant_id, config_key)`: e.g., `maxLeadTags`. (Could also be a DB tool if stored in `tenant_config` table).
+
 **3. High-Level Implementation Notes (MCP Perspective):**
-    - Many frontend interactions rely on Supabase RPCs and direct table access. MCP tools would primarily wrap these for consistency, additional logic (e.g., caching), or if direct Supabase client use from MCP server is preferred over HTTP calls to Supabase.
-    - The `rpc_call` tool needs to be flexible.
-    - Generic `get_table_data`, `insert_table_data`, `update_table_data` tools would simplify many interactions, ensuring consistent tenant/user context application.
-    - Caching tools can significantly offload Supabase for frequently accessed, less volatile data like navigation or translations.
-    - STT Proxy via `invoke_supabase_function` is a good pattern for secure API key management.
-    - Background task monitoring (`workmanager_alerts`, `cron_errors`) can be centralized via MCP logging tools.
+    - Many new RPCs are implied by the frontend logic (e.g., `process_nlp_input`, `prime_suggestion`, `test_agent_prompt`, `simulate_agent_action`, `aggregate_preferences`, `get_nlp_context`, `validate_lead_input`). MCP tools would wrap these.
+    - The WebSocket pool (`WebSocketPool.ts`) is client-side, but if MCP were to manage server-side WebSocket connections for agents, similar resilience patterns would apply.
+    - Idempotency key management via Redis is a critical pattern that MCP caching tools can support.
+    - Configuration (`AppConfig`) is primarily frontend, but if parts are dynamically sourced from a backend/MCP, a `config_management` tool would be needed.
+    - The distinction between direct Supabase SDK use in frontend and MCP-brokered access needs to be clear. MCP tools are relevant where server-side logic, aggregation, enhanced security, or abstraction over direct DB/RPC calls is beneficial.
 
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
@@ -689,6 +714,8 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_nlp_command_suggestions(query_text, user_id, tenant_id, client_side_model_available=True)` (Conceptual)
     - `get_nlp_predictions(text_input, model_name='intent-classifier', tokenizer_url=None, model_url=None, tenant_id=None, user_id=None)` (Conceptual)
     - `get_predictive_navigation_items(user_id, tenant_id, current_context_json, top_n=3)` (Conceptual)
+    - `get_predictive_prefill_suggestions(tenant_id, form_type, current_form_data_json)` (Conceptual)
+    - `run_agent_action_simulation(agent_id, action_type, payload_json, user_id, tenant_id)` (Conceptual)
 
 **3. Offline-First Sync Tools (`tools/offline_sync/offline_sync_tools.py`)** (Potential)
     - `process_offline_mutation_batch(mutations)`
@@ -717,6 +744,12 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `set_cached_kpis_data(tenant_id, time_range, kpi_data, ttl_seconds)` (Conceptual)
     - `get_cached_action_validation(action_id, trace_id)`
     - `set_cached_action_validation(action_id, trace_id, validation_result_json, ttl_seconds)`
+    - `get_cached_nlp_context(user_id)`
+    - `set_cached_nlp_context(user_id, context_data_json, ttl_seconds)`
+    - `get_cached_suggestions(tenant_id, suggestion_key)`
+    - `set_cached_suggestions(tenant_id, suggestion_key, suggestions_data_json, ttl_seconds)`
+    - `check_idempotency_key(key)`
+    - `store_idempotency_key(key, ttl_seconds)`
 
 **6. Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
     - `execute_pg_query(tenant_id, query_text, params, use_replica=True)`
@@ -852,6 +885,10 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `trigger_canary_analysis(service_name, new_version_details, baseline_version_details)` (Potential)
     - `get_embedding_worker_status(priority_filter=None)`
     - `scale_embedding_workers(priority, desired_count_delta)`
+
+**15. Configuration Management Tools (`tools/config_management/config_management_tools.py`)**
+    - `get_app_config_value(config_path_string)`
+    - `get_tenant_specific_config(tenant_id, config_key)`
 
 *(Further tool categories and functions will be added as analysis progresses.)*
 
