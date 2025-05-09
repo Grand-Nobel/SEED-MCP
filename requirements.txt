@@ -1,5 +1,1 @@
-fastapi==0.110.1
-uvicorn[standard]==0.29.0
-python-dotenv==1.0.1       
-httpx==0.27.0               
-pydantic[email]==2.6.4     
+fastapi\nuvicorn[standard]\nsupabase\npydantic\npython-dotenv\n# Add other dependencies as needed, e.g.:\n# aio_pika (for RabbitMQ if used later)\n# redis (for Redis if used later)\n
