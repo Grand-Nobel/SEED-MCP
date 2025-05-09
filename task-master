@@ -344,6 +344,10 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_file_storage_url(action, tenant_id, file_path, content_type=None)`
     - `delete_file_from_supabase_storage(tenant_id, storage_path)`
     - `invoke_edge_function(function_name, payload)`
+    - `manage_user_mfa_status(user_id, action_enable_disable)`
+    - `revoke_supabase_user_session(user_id, session_id_or_all)`
+    - `get_app_secret(secret_name)` (If using Supabase Vault)
+    - `set_app_secret(secret_name, secret_value)` (If using Supabase Vault)
     - `get_tenant_icon_set_config(tenant_id)` (Potential)
     - `get_tenant_grid_config(tenant_id)` (Potential)
 
@@ -412,6 +416,13 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `update_existing_agent_prompt_template(prompt_id, updates_payload)`
     - `get_active_agent_prompt(agent_name)`
     - `update_agent_memory_embedding_expiry(embedding_id, expires_at_timestamp)`
+    - `log_audit_trail_event(tenant_id, user_id, session_id, action_enum, entity_type, entity_id, changed_fields_json, ip_address, user_agent, status_enum, failure_reason)`
+    - `get_pii_classification_for_field(field_identifier)`
+    - `manage_pii_classification_entry(action, entry_details)`
+    - `add_jwt_to_revocation_list(jti, expiry_timestamp)` (If DB-based)
+    - `is_jwt_revoked(jti)` (If DB-based)
+    - `get_decrypted_tenant_config_value(tenant_id, key_name)` (Conceptual)
+    - `set_encrypted_tenant_config_value(tenant_id, key_name, plain_value)` (Conceptual)
     - (Reinforced) `get_agent_definition`, `update_agent_definition`
     - Specific CRUD helpers for core tables (e.g., `create_lead`, `get_bookings_for_staff`, `log_interaction`, `log_agent_execution`, `log_billing_token_usage`, `get_file_metadata`, `create_file_metadata`, `delete_file_metadata`).
 
@@ -434,6 +445,8 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `update_tenant_settings(tenant_id, settings_payload)`
     - (Reinforced) Functions for ACP, vector tuning, federated learning configs.
     - (Reinforced) CRUD for `agent_learning_config`, `agent_prompt_templates`.
+    - (Reinforced) Managing `tenant_config` (encrypted per-tenant external API keys).
+    - (Reinforced) Managing `data_classification_registry` (if stored as a configurable table).
 
 **9. Agent Log Review Tools (`tools/agent_log_review/agent_log_review_tools.py`)**
     - `query_agent_logs(tenant_id, filters)`
@@ -448,6 +461,11 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
 
 **11. Cloud Service Interaction Tools (`tools/cloud_services/aws_tools.py` or similar)**
     - `aggregate_with_nitro_enclave(data_to_aggregate, aggregation_config)` (If AWS Nitro Enclaves are used)
+
+**12. Secrets Management Tools (NEW - `tools/secrets_management/secrets_manager_tools.py` - if external)**
+    - `get_external_secret(secret_path_or_name)`
+    - `set_external_secret(secret_path_or_name, secret_value)`
+    - `manage_secret_rotation_policy(secret_name, policy_details)`
 
 *(Further tool categories and functions will be added as analysis progresses.)*
 
