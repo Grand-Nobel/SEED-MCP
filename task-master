@@ -114,6 +114,77 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - Ensure all AI agent interactions are routed through the generic AI agent tool functions.
     - Define schemas for new Supabase tables: `system_logs`, `system_metrics`, `tenant_services_config`.
 
+### Section 3: Core Operational & Supporting Schema (PostgreSQL + Supabase OSS)
+
+**1. Key Functionalities Identified:**
+    - **Database Schema:** Defines numerous tables for core operations (tenants, users, leads, clients, bookings, interactions), agent operations (agent_logs, workflow_definitions, workflow_runs, agent_memory_embeddings, agent_configs), analytics, file metadata, and system/audit logs.
+    - **Multi-Tenancy & RLS:** Heavy emphasis on `tenant_id` in all relevant tables and enforcement via PostgreSQL Row Level Security.
+    - **Supabase Stack Integration:** Uses Supabase Auth, Realtime, Storage, Edge Functions, and Supavisor.
+    - **Vector Storage (pgvector):** `agent_memory_embeddings` table uses pgvector for AI memory.
+    - **File Storage:** Metadata in `files` table, blobs in S3-compatible storage via Supabase Storage.
+    - **Workflow Engine Support:** Tables `workflow_definitions` and `workflow_runs` support a workflow engine.
+    - **Configuration Management:** `agent_configs` table for JSON schemas and agent-specific configurations.
+    - **Logging:** Extensive logging to `system_logs`, `audit_logs`, and `agent_logs`.
+    - **Billing & Usage Tracking:** `billing_usage` and `billing_tokens` tables.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
+        - **Generic CRUD:** `execute_pg_query` (SELECT, INSERT, UPDATE, DELETE for various tables), `execute_pg_transaction`.
+        - **Schema Management (DDL):**
+            - `manage_pg_enum_type(action, type_name, values)`
+            - `manage_pg_table(action, table_definition)` (general DDL)
+            - `manage_pg_rls_policy(action, table_name, policy_name, policy_definition)`
+        - **Vector DB (pgvector specific):**
+            - `insert_pg_vector_embedding(tenant_id, entity_type, entity_id, embedding, metadata, source_text_hash, source_text, priority)`
+            - `search_pg_vector_embeddings(tenant_id, query_vector, filters, top_k)`
+            - `update_pg_vector_embedding_access(tenant_id, embedding_id, access_timestamp)` (for `last_accessed_at`, `retrieval_count`)
+            - `run_pg_vector_gc_job(tenant_id)` (embedding garbage collection)
+        - **Specific Table Operations (examples):**
+            - `get_user_by_auth_id(auth_id)`
+            - `create_lead(tenant_id, lead_data)`
+            - `get_bookings_for_staff(tenant_id, staff_id, time_range)`
+            - `log_interaction(tenant_id, interaction_data)`
+            - `log_agent_execution(tenant_id, agent_log_data)` (for `agent_logs`)
+            - `log_billing_token_usage(tenant_id, token_usage_data)` (for `billing_tokens`)
+            - `get_file_metadata(tenant_id, file_id_or_path)`
+            - `create_file_metadata(tenant_id, file_metadata)`
+            - `delete_file_metadata(tenant_id, file_id)` (must also trigger blob deletion)
+
+    b. **Supabase Stack Interaction Tools (`tools/supabase/supabase_tools.py`)**
+        - `manage_supabase_user(action, user_details)` (e.g., create user in `auth.users` and link to `public.users`)
+        - `get_file_storage_url(action, tenant_id, file_path, content_type=None)` (for upload/download presigned URLs)
+        - `delete_file_from_supabase_storage(tenant_id, storage_path)` (called by DB tool or directly)
+        - `invoke_edge_function(function_name, payload)` (reconfirmed, e.g., for dynamic partition creation)
+
+    c. **Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
+        - `create_workflow_definition(tenant_id, name, description, trigger_type, trigger_config, structure_json)`
+        - `update_workflow_definition(tenant_id, workflow_def_id, updates_json)`
+        - `get_workflow_definition(tenant_id, workflow_def_id)`
+        - `activate_workflow_definition(tenant_id, workflow_def_id, is_active_flag)`
+        - `trigger_workflow_run(tenant_id, workflow_def_id, trigger_event_data, input_context)`
+        - `get_workflow_run_details(tenant_id, workflow_run_id)`
+        - `update_workflow_run(tenant_id, workflow_run_id, status, current_step_id, steps_state_updates, error_log_updates)`
+
+    d. **Settings Management Tools (`tools/settings_management/settings_management_tools.py`)**
+        - `get_agent_config_value(tenant_id, agent_name, config_key, version_tag=None)`
+        - `set_agent_config_value(tenant_id, agent_name, config_key, config_value, version_tag=None, description=None)`
+        - `manage_json_schema(action, schema_name, version, schema_definition_json)` (for `agent_configs` table storing JSON schemas)
+        - `get_tenant_settings(tenant_id)` (from `tenants.settings` JSONB)
+        - `update_tenant_settings(tenant_id, settings_payload)`
+
+    e. **Agent Log Review Tools (`tools/agent_log_review/agent_log_review_tools.py`)**
+        - `query_agent_logs(tenant_id, filters)` (e.g., by agent_name, status, time_range, related_entity)
+        - `get_agent_log_details(tenant_id, agent_log_id)`
+        - `submit_agent_log_feedback(tenant_id, agent_log_id, user_id, rating, comment)` (populates `agent_shadow_action_responses`)
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - This section defines the bulk of the database interaction logic. MCP tools must provide a secure, tenant-aware abstraction layer.
+    - RLS policies are critical and assumed to be handled at the DB level, but MCP tools must operate with user contexts that allow RLS to function correctly (e.g., passing JWT claims or setting session variables).
+    - Encryption of sensitive data in JSONB fields (e.g., `agent_logs.input_payload`, `agent_configs.config_value`) needs to be handled, potentially within the MCP tool functions before DB insertion or after retrieval, using pgcrypto or application-level encryption with keys from a secrets manager.
+    - For tables like `agent_memory_embeddings`, `interactions`, `agent_logs`, `system_logs`, `audit_logs`, which can grow very large, MCP tools should support efficient querying, possibly with pagination.
+    - The `files` table metadata operations need to be coordinated with actual Supabase Storage blob operations.
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
@@ -126,6 +197,10 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `log_system_event(tenant_id, event_type, payload)`
     - `log_system_metric(tenant_id, metric_name, value_payload)`
     - `get_tenant_service_config(tenant_id)`
+    - `manage_supabase_user(action, user_details)`
+    - `get_file_storage_url(action, tenant_id, file_path, content_type=None)`
+    - `delete_file_from_supabase_storage(tenant_id, storage_path)`
+    - `invoke_edge_function(function_name, payload)`
     - `get_tenant_icon_set_config(tenant_id)` (Potential)
     - `get_tenant_grid_config(tenant_id)` (Potential)
 
@@ -141,22 +216,52 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
 **3. Offline-First Sync Tools (`tools/offline_sync/offline_sync_tools.py`)** (Potential)
     - `process_offline_mutation_batch(mutations)`
 
-**4. Message Queue Interaction Tools (NEW - `tools/message_queues/message_queue_tools.py`)**
+**4. Message Queue Interaction Tools (`tools/message_queues/message_queue_tools.py`)**
     - `initialize_tenant_rabbitmq_queue(tenant_id)`
     - `publish_to_rabbitmq_queue(tenant_id, event_payload, urgency_level)`
     - `get_rabbitmq_queue_depth(tenant_id, queue_name)`
     - `process_rabbitmq_batch(tenant_id)` (Potential internal worker function)
 
-**5. Caching Interaction Tools (NEW - `tools/caching/caching_tools.py`)**
+**5. Caching Interaction Tools (`tools/caching/caching_tools.py`)**
     - `get_cached_item(tenant_id, cache_key)`
     - `set_cached_item(tenant_id, cache_key, item_data, custom_ttl=None)`
     - `invalidate_cache_key(tenant_id, cache_key_pattern)`
 
 **6. Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
+    - `execute_pg_query(tenant_id, query_text, params, use_replica=True)`
+    - `execute_pg_transaction(tenant_id, list_of_queries_and_params)`
+    - `manage_pg_enum_type(action, type_name, values)`
+    - `manage_pg_table(action, table_definition)`
+    - `manage_pg_rls_policy(action, table_name, policy_name, policy_definition)`
     - `create_pg_tenant_index(tenant_id, table_name, column_names, index_type)`
     - `tune_pg_hnsw_index(tenant_id, index_name, ef_construction, m)`
     - `create_pg_tenant_partition(tenant_id, table_name, partition_logic_details)`
-    - `execute_pg_query(tenant_id, query_text, params, use_replica=True)`
+    - `insert_pg_vector_embedding(tenant_id, entity_type, entity_id, embedding, metadata, source_text_hash, source_text, priority)`
+    - `search_pg_vector_embeddings(tenant_id, query_vector, filters, top_k)`
+    - `update_pg_vector_embedding_access(tenant_id, embedding_id, access_timestamp)`
+    - `run_pg_vector_gc_job(tenant_id)`
+    - Specific CRUD helpers for core tables (e.g., `create_lead`, `get_bookings_for_staff`, `log_interaction`, `log_agent_execution`, `log_billing_token_usage`, `get_file_metadata`, `create_file_metadata`, `delete_file_metadata`).
+
+**7. Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
+    - `create_workflow_definition(tenant_id, name, description, trigger_type, trigger_config, structure_json)`
+    - `update_workflow_definition(tenant_id, workflow_def_id, updates_json)`
+    - `get_workflow_definition(tenant_id, workflow_def_id)`
+    - `activate_workflow_definition(tenant_id, workflow_def_id, is_active_flag)`
+    - `trigger_workflow_run(tenant_id, workflow_def_id, trigger_event_data, input_context)`
+    - `get_workflow_run_details(tenant_id, workflow_run_id)`
+    - `update_workflow_run(tenant_id, workflow_run_id, status, current_step_id, steps_state_updates, error_log_updates)`
+
+**8. Settings Management Tools (`tools/settings_management/settings_management_tools.py`)**
+    - `get_agent_config_value(tenant_id, agent_name, config_key, version_tag=None)`
+    - `set_agent_config_value(tenant_id, agent_name, config_key, config_value, version_tag=None, description=None)`
+    - `manage_json_schema(action, schema_name, version, schema_definition_json)`
+    - `get_tenant_settings(tenant_id)`
+    - `update_tenant_settings(tenant_id, settings_payload)`
+
+**9. Agent Log Review Tools (`tools/agent_log_review/agent_log_review_tools.py`)**
+    - `query_agent_logs(tenant_id, filters)`
+    - `get_agent_log_details(tenant_id, agent_log_id)`
+    - `submit_agent_log_feedback(tenant_id, agent_log_id, user_id, rating, comment)`
 
 *(Further tool categories and functions will be added as analysis progresses)*
 
