@@ -36,10 +36,54 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - Ensure secure data handling, parameter sanitization, and robust error responses.
     - Expose these tool functions through the corresponding FastAPI routers (e.g., `seed-supabase.py`, `seed-ai_agents.py`).
 
+### Section 1 pt II: SEED Design System (Continued - UI Patterns & Accessibility)
+
+**1. Key Functionalities Identified:**
+    - Consistent loading state management (`useLoadingState` hook) with UI event logging to Supabase.
+    - Reusable drag-and-drop functionality (`useDragDrop` hook) with UI event logging to Supabase.
+    - AI interaction elements (`AiThinkingIndicator`, `AiSuggestedActions`) with UI event logging and `agentRunner` interaction for suggestions.
+    - Comprehensive accessibility features (Keyboard Navigation, Screen Reader announcements, Color Contrast utilities, Text Resizability, Alt Text utilities).
+    - UI event logging to Supabase for accessibility-related events (focus changes, input modality, screen reader announcements, contrast checks, alt text validation, text zoom changes).
+    - Fetching tenant-specific accessibility configurations from Supabase.
+    - AI-driven alt text generation for images via `agentRunner`.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Supabase Stack Interaction Tools (`tools/supabase/supabase_tools.py`)**
+        - `log_ui_event(tenant_id, event_type, payload)`: (Reinforced) Heavily used for logging various UI and accessibility events.
+        - `get_tenant_accessibility_config(tenant_id)`: Fetches accessibility configurations (contrast level, font preferences, alt text guidelines).
+
+    b. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)**
+        - `get_ai_suggested_actions(tenant_id, current_context)`: Interacts with `agentRunner` (e.g., 'ActionSuggester' agent) to fetch suggested UI actions.
+        - `generate_ai_alt_text(image_url, image_type, tenant_id)`: Interacts with `agentRunner` (e.g., 'AltTextGenerator' agent) to generate alt text for images.
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - Ensure `log_ui_event` is robust enough to handle a wide variety of event types and payloads from the design system components.
+    - Define/confirm Supabase table schema for `tenant_accessibility`.
+    - Implement the new functions in their respective `_tools.py` files.
+    - Expose these functions via FastAPI routers.
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
-*(This section will list all identified tools and their functions as analysis progresses)*
+**1. Supabase Stack Interaction Tools (`tools/supabase/supabase_tools.py`)**
+    - `get_tenant_theme(tenant_id)`
+    - `log_ui_event(tenant_id, event_type, payload)`
+    - `get_tenant_validation_rules(tenant_id)`
+    - `get_tenant_table_config(tenant_id)`
+    - `get_tenant_accessibility_config(tenant_id)`
+    - `get_tenant_icon_set_config(tenant_id)` (Potential)
+    - `get_tenant_grid_config(tenant_id)` (Potential)
+
+**2. AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)**
+    - `get_ai_input_suggestions(tenant_id, current_input_context)`
+    - `get_ai_suggested_actions(tenant_id, current_context)`
+    - `generate_ai_alt_text(image_url, image_type, tenant_id)`
+
+**3. Offline-First Sync Tools (`tools/offline_sync/offline_sync_tools.py`)** (Potential)
+    - `process_offline_mutation_batch(mutations)`
+
+*(Further tool categories and functions will be added as analysis progresses)*
 
 ---
 *This document is actively being updated.*
