@@ -380,6 +380,46 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - A robust solution for JWT revocation (e.g., Redis-based list, DB table) needs to be implemented and checked by auth middleware, potentially with MCP tool support for managing the list.
     - If an external secrets manager like HashiCorp Vault is used, a new MCP tool category will be required to interface with it.
 
+### Section 8: DevOps, Scaling & Deployment
+
+**1. Key Functionalities Identified:**
+    - Secure and dynamic management of secrets for IaC and application services.
+    - Scheduling of database tasks via `pg_cron` initiated by application logic.
+    - Dynamic feature flagging for controlling feature availability and graceful degradation.
+    - Operational capabilities for self-healing, such as restarting agent runners or querying their status.
+    - Dynamic adjustment of service runtime configurations.
+    - API-level policy enforcement using OPA, potentially requiring dynamic data fetching.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Secrets Management Tools (`tools/secrets_management/secrets_manager_tools.py`)** (Reinforced - from Sec 7, heavily used by Sec 8 processes)
+        - `get_external_secret(secret_path_or_name)`: Used by IaC, CI/CD, and services to fetch secrets.
+        - `set_external_secret(secret_path_or_name, secret_value)`: For managing secrets if updated programmatically.
+
+    b. **Direct Database Interaction Tools (`tools/databases/database_tools.py`)** (Enhancement)
+        - `schedule_db_task(tenant_id, cron_expression, task_name, task_sql_or_function_name, task_parameters_json=None)`: Allows agents or system components to schedule recurring or future database tasks using `pg_cron`.
+        - `get_tenant_subscription_details(tenant_id)` (Potential - if OPA needs this for API policy): Fetches tenant subscription tier or specific entitlements for OPA policy decisions.
+
+    c. **Feature Flag Management Tools (NEW - `tools/feature_flags/feature_flag_tools.py`)**
+        - `is_feature_flag_enabled(tenant_id_or_global, user_id_or_context, flag_name)`: Checks if a feature flag is active for a given context (tenant, user, or global).
+        - `get_feature_flag_variant(tenant_id_or_global, user_id_or_context, flag_name)`: Gets the specific variant (e.g., 'A', 'B', 'control') of a feature flag.
+        - `get_all_feature_flags_for_context(tenant_id_or_global, user_id_or_context)`: Retrieves all applicable feature flags and their states/variants for a given context.
+
+    d. **Operational Tools (NEW - `tools/operational_tools/operational_tools.py`)**
+        - `get_service_status(tenant_id_or_global, service_name_or_group, instance_id=None)`: Retrieves status of specified services or agent runners.
+        - `restart_service_instance(tenant_id_or_global, service_name_or_group, instance_id=None)`: Initiates a restart of specified service instances or agent runners (e.g., for self-healing).
+        - `trigger_canary_analysis(service_name, new_version_details, baseline_version_details)` (Potential - if CI/CD needs to trigger this programmatically via MCP).
+
+    e. **Settings Management Tools (`tools/settings_management/settings_management_tools.py`)** (Enhancement)
+        - `update_service_runtime_setting(tenant_id_or_global, service_name, setting_key, setting_value)`: Allows dynamic updates to specific runtime settings of a service, potentially used by self-healing or admin actions.
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - Feature Flag tools will require integration with a feature flag management system (e.g., LaunchDarkly, Flagsmith SDK, or an internal DB-backed solution). MCP tools provide a standardized interface.
+    - `schedule_db_task` will need to construct and execute SQL commands to interact with `pg_cron` functions securely.
+    - Operational tools (`get_service_status`, `restart_service_instance`) will likely interact with the underlying orchestration platform (e.g., Kubernetes API) or a custom control plane. Permissions must be carefully managed.
+    - `get_tenant_subscription_details` would query the relevant billing/tenant management tables.
+    - `update_service_runtime_setting` needs a mechanism for services to pick up configuration changes (e.g., polling, push notifications, restart).
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
@@ -477,6 +517,8 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `set_encrypted_tenant_config_value(tenant_id, key_name, plain_value)` (Conceptual)
     - (Reinforced) `get_agent_definition`, `update_agent_definition`
     - Specific CRUD helpers for core tables (e.g., `create_lead`, `get_bookings_for_staff`, `log_interaction`, `log_agent_execution`, `log_billing_token_usage`, `get_file_metadata`, `create_file_metadata`, `delete_file_metadata`).
+    - `schedule_db_task(tenant_id, cron_expression, task_name, task_sql_or_function_name, task_parameters_json=None)`: Allows agents or system components to schedule recurring or future database tasks using `pg_cron`.
+    - `get_tenant_subscription_details(tenant_id)` (Potential - if OPA needs this for API policy): Fetches tenant subscription tier or specific entitlements for OPA policy decisions.
 
 **7. Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
     - `create_workflow_definition(tenant_id, name, description, trigger_type, trigger_config, structure_json)`
@@ -499,6 +541,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - (Reinforced) CRUD for `agent_learning_config`, `agent_prompt_templates`.
     - (Reinforced) Managing `tenant_config` (encrypted per-tenant external API keys).
     - (Reinforced) Managing `data_classification_registry` (if stored as a configurable table).
+    - `update_service_runtime_setting(tenant_id_or_global, service_name, setting_key, setting_value)`: Allows dynamic updates to specific runtime settings of a service, potentially used by self-healing or admin actions.
 
 **9. Agent Log Review Tools (`tools/agent_log_review/agent_log_review_tools.py`)**
     - `query_agent_logs(tenant_id, filters)`
@@ -518,6 +561,16 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_external_secret(secret_path_or_name)`
     - `set_external_secret(secret_path_or_name, secret_value)`
     - `manage_secret_rotation_policy(secret_name, policy_details)`
+
+**13. Feature Flag Management Tools (`tools/feature_flags/feature_flag_tools.py`)**
+    - `is_feature_flag_enabled(tenant_id_or_global, user_id_or_context, flag_name)`: Checks if a feature flag is active for a given context (tenant, user, or global).
+    - `get_feature_flag_variant(tenant_id_or_global, user_id_or_context, flag_name)`: Gets the specific variant (e.g., 'A', 'B', 'control') of a feature flag.
+    - `get_all_feature_flags_for_context(tenant_id_or_global, user_id_or_context)`: Retrieves all applicable feature flags and their states/variants for a given context.
+
+**14. Operational Tools (`tools/operational_tools/operational_tools.py`)**
+    - `get_service_status(tenant_id_or_global, service_name_or_group, instance_id=None)`: Retrieves status of specified services or agent runners.
+    - `restart_service_instance(tenant_id_or_global, service_name_or_group, instance_id=None)`: Initiates a restart of specified service instances or agent runners (e.g., for self-healing).
+    - `trigger_canary_analysis(service_name, new_version_details, baseline_version_details)` (Potential - if CI/CD needs to trigger this programmatically via MCP).
 
 *(Further tool categories and functions will be added as analysis progresses.)*
 
