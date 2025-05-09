@@ -512,7 +512,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
 
     a. **Supabase Stack Interaction Tools (`tools/supabase/supabase_tools.py`)** (Enhancements & New)
         - `get_translations(locale, namespace)`: Fetches translations for a given locale and namespace.
-        - `rpc_call(function_name, params_dict, tenant_id=None)`: Generic Supabase RPC call. Used for:
+        - `rpc_call(function_name, params_dict, tenant_id=None, user_id=None)`: Generic Supabase RPC call. Used for:
             - `fetch_commands` (server-side command palette fallback)
             - `rotate_token` (mobile token rotation)
             - `notify_admin` (mobile admin notification)
@@ -524,7 +524,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
             - `backup_dashboard_archive` (DB maintenance to S3)
             - `cron_monitoring` (DB maintenance)
         - `get_cron_job_run_details(limit=10, job_name_filter=None, status_filter=None)`: Fetches details from `cron.job_run_details`.
-        - `invoke_supabase_function(function_name, body_payload, headers_dict=None)`: Used for `stt-proxy`.
+        - `invoke_supabase_function(function_name, body_payload, headers_dict=None, tenant_id=None, user_id=None)`: Used for `stt-proxy` and `filter-suggestions`.
 
     b. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)** (Enhancements)
         - `get_nlp_command_suggestions(query_text, user_id, tenant_id, client_side_model_available=True)`: (Conceptual) Could be used by server-side `fetch_commands` if it involves more complex NLP than simple DB lookups.
@@ -544,9 +544,102 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
 
 **3. High-Level Implementation Notes (MCP Perspective):**
     - The `rpc_call` tool needs to be robust, handling various parameter types and securely passing tenant/user context if the RPCs themselves don't handle it via session variables set by Supabase.
-    - For `stt-proxy` via `invoke_supabase_function`, the MCP tool acts as a pass-through, but ensures proper authentication to the Supabase function.
+    - For `stt-proxy` and `filter-suggestions` via `invoke_supabase_function`, the MCP tool acts as a pass-through, but ensures proper authentication to the Supabase function.
     - Error logging tools (`log_partition_error_db`, etc.) provide a centralized way for DB functions (which might not have direct Sentry access) to report issues that MCP can then relay or store.
     - Translation fetching and caching tools would abstract the Supabase queries and potential server-side caching layers.
+
+### Section 10.2 & 10.3: Core Application Layout & Navigation / Agent Interaction Framework
+
+**1. Key Functionalities Identified:**
+    - **Mobile Bottom Navigation & Background Tasks:**
+        - Prefetching route data based on frequency, managed by Workmanager.
+        - Syncing frequent routes.
+        - Handling task retries with limits and logging to `workmanager_alerts`.
+        - Notifying admin via RPC for critical task failures.
+        - Secure API key handling for STT, with proxy fallback.
+        - Executing commands via RPC.
+        - Cleaning up `action_log` via cron.
+    - **Agent Suggestion System:**
+        - Fetching and filtering suggestions via Supabase function (`filter-suggestions`).
+        - Storing and retrieving user preferences for suggestion frequency and thresholds.
+        - Submitting feedback on suggestions, including usability scores.
+        - Adjusting suggestion frequency scores based on feedback.
+    - **Client Command Dashboard:**
+        - Fetching KPIs, pipeline data, and agent status, potentially from read replicas and with caching via RPC (`get_cached_kpis`).
+        - Real-time updates via Supabase channels.
+    - **Global Agent State Management (Zustand/Riverpod):**
+        - CRDT-based state recovery for offline mutations.
+        - Storing per-agent preferences.
+    - **Agent Action Validation:**
+        - Signature validation via Web Worker or main thread fallback.
+        - Logging validation results.
+    - **Agent-Initiated UI Command Center:**
+        - Idempotent execution of UI commands (update_widget, trigger_action, modify_layout) via RPC.
+        - Real-time processing of commands from `ui_commands` table.
+    - **UI Performance Profiling:**
+        - Monitoring CRDT state size.
+        - Exporting metrics to OpenTelemetry and Redis queue.
+    - **Prompt Debugger & Action Simulator:**
+        - Testing agent prompts and actions via RPC (`test_agent_prompt`, `simulate_agent_action`).
+        - Logging debug attempts and usability feedback.
+    - **Adaptive Suggestion Frequency & Granular Feedback:**
+        - Real-time adjustment of suggestion frequency based on feedback.
+    - **Shadow Mode Visualization & Proactive UI Adaptation:**
+        - Fetching and applying UI adaptations based on confidence and permissions.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Supabase Stack Interaction Tools (`tools/supabase/supabase_tools.py`)** (Enhancements & New)
+        - `get_table_data(table_name, filters_dict, select_columns='*', order_by=None, limit=None, use_replica=False, tenant_id=None, user_id=None)`: Generic table data fetcher. Used for:
+            - `route_data` (mobile prefetch)
+            - `route_usage` (mobile sync frequent routes)
+            - `nav_items` (web sidebar)
+            - `dashboard_kpis`, `leads`, `agent_status` (web dashboard)
+            - `agent_suggestions` (shadow mode, suggestion system)
+            - `ui_adaptations` (proactive UI)
+            - `prompt_debug_logs`, `action_simulations`, `agent_decision_logs` (admin/debug UIs)
+            - `user_permissions` (filter-suggestions function)
+            - `user_preferences` (filter-suggestions function, adaptive frequency)
+        - `insert_table_data(table_name, data_dict_or_list, tenant_id=None, user_id=None)`: Generic table insert. Used for:
+            - `workmanager_metrics` (mobile background tasks)
+            - `workmanager_alerts` (mobile background tasks)
+            - `prefetch_metrics` (web sidebar)
+            - `suggestion_feedback`
+            - `validation_logs`
+            - `ui_commands` (if not via RPC)
+            - `prompt_debug_logs`, `action_simulations`, `agent_decision_logs`
+            - `offline_mutations` (poison pill logging)
+        - `update_table_data(table_name, data_updates_dict, filters_dict, tenant_id=None, user_id=None)`: Generic table update. Used for:
+            - `agent_suggestions` (approve, adjust frequency)
+            - `user_preferences` (suggestion frequency)
+            - `ui_commands` (status update)
+            - `ui_adaptations` (mark applied)
+            - `agent_decision_logs` (feedback update)
+        - `delete_table_data(table_name, filters_dict, tenant_id=None, user_id=None)`: Generic table delete.
+            - `action_log` (cleanup cron)
+
+    b. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)** (Enhancements)
+        - `get_nlp_predictions(text_input, model_name='intent-classifier', tokenizer_url=None, model_url=None, tenant_id=None, user_id=None)`: (Conceptual) For server-side NLP if client-side fails or for more complex models.
+        - `get_predictive_navigation_items(user_id, tenant_id, current_context_json, top_n=3)`: (Conceptual) For web sidebar predictive prefetch.
+
+    c. **Caching Interaction Tools (`tools/caching/caching_tools.py`)** (Enhancements)
+        - `get_cached_nav_items(user_id)`: (Conceptual) Server-side cache for `nav_items`.
+        - `set_cached_nav_items(user_id, nav_items_data, ttl_seconds)`: (Conceptual)
+        - `get_cached_kpis_data(tenant_id, time_range)`: (Conceptual) If `get_cached_kpis` RPC uses MCP for caching.
+        - `set_cached_kpis_data(tenant_id, time_range, kpi_data, ttl_seconds)`: (Conceptual)
+        - `get_cached_action_validation(action_id, trace_id)`: For `validateAgentAction`.
+        - `set_cached_action_validation(action_id, trace_id, validation_result_json, ttl_seconds)`: For `validateAgentAction`.
+
+    d. **Message Queue Interaction Tools (`tools/message_queues/message_queue_tools.py`)** (Enhancements)
+        - `publish_to_ui_metrics_queue(metrics_payload_list)`: For UI performance profiling.
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - Many frontend interactions rely on Supabase RPCs and direct table access. MCP tools would primarily wrap these for consistency, additional logic (e.g., caching), or if direct Supabase client use from MCP server is preferred over HTTP calls to Supabase.
+    - The `rpc_call` tool needs to be flexible.
+    - Generic `get_table_data`, `insert_table_data`, `update_table_data` tools would simplify many interactions, ensuring consistent tenant/user context application.
+    - Caching tools can significantly offload Supabase for frequently accessed, less volatile data like navigation or translations.
+    - STT Proxy via `invoke_supabase_function` is a good pattern for secure API key management.
+    - Background task monitoring (`workmanager_alerts`, `cron_errors`) can be centralized via MCP logging tools.
 
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
@@ -571,9 +664,13 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_tenant_icon_set_config(tenant_id)` (Potential)
     - `get_tenant_grid_config(tenant_id)` (Potential)
     - `get_translations(locale, namespace)`
-    - `rpc_call(function_name, params_dict, tenant_id=None)`
+    - `rpc_call(function_name, params_dict, tenant_id=None, user_id=None)`
     - `get_cron_job_run_details(limit=10, job_name_filter=None, status_filter=None)`
-    - `invoke_supabase_function(function_name, body_payload, headers_dict=None)`
+    - `invoke_supabase_function(function_name, body_payload, headers_dict=None, tenant_id=None, user_id=None)`
+    - `get_table_data(table_name, filters_dict, select_columns='*', order_by=None, limit=None, use_replica=False, tenant_id=None, user_id=None)`
+    - `insert_table_data(table_name, data_dict_or_list, tenant_id=None, user_id=None)`
+    - `update_table_data(table_name, data_updates_dict, filters_dict, tenant_id=None, user_id=None)`
+    - `delete_table_data(table_name, filters_dict, tenant_id=None, user_id=None)`
 
 **2. AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)**
     - `get_ai_input_suggestions(tenant_id, current_input_context)`
@@ -590,6 +687,8 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `generate_semantic_tags_and_summary(text, model_name='claude-3-haiku', tenant_id=None)`
     - `invoke_context_harmonizer_agent(conflicting_context_items_array, tenant_id)` (Potential)
     - `get_nlp_command_suggestions(query_text, user_id, tenant_id, client_side_model_available=True)` (Conceptual)
+    - `get_nlp_predictions(text_input, model_name='intent-classifier', tokenizer_url=None, model_url=None, tenant_id=None, user_id=None)` (Conceptual)
+    - `get_predictive_navigation_items(user_id, tenant_id, current_context_json, top_n=3)` (Conceptual)
 
 **3. Offline-First Sync Tools (`tools/offline_sync/offline_sync_tools.py`)** (Potential)
     - `process_offline_mutation_batch(mutations)`
@@ -604,6 +703,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `publish_to_embedding_queue(event_payload_dict, priority='normal')`
     - `consume_from_embedding_queue(priority='normal', consumer_group, consumer_name, count, block_ms)`
     - `publish_to_embedding_dlq(failed_event_payload_dict, error_details_json)`
+    - `publish_to_ui_metrics_queue(metrics_payload_list)`
 
 **5. Caching Interaction Tools (`tools/caching/caching_tools.py`)**
     - `get_cached_item(tenant_id, cache_key)`
@@ -611,6 +711,12 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `invalidate_cache_key(tenant_id, cache_key_pattern)`
     - `get_cached_translations(locale, namespace)` (Conceptual)
     - `set_cached_translations(locale, namespace, translations_data, ttl_seconds)` (Conceptual)
+    - `get_cached_nav_items(user_id)` (Conceptual)
+    - `set_cached_nav_items(user_id, nav_items_data, ttl_seconds)` (Conceptual)
+    - `get_cached_kpis_data(tenant_id, time_range)` (Conceptual)
+    - `set_cached_kpis_data(tenant_id, time_range, kpi_data, ttl_seconds)` (Conceptual)
+    - `get_cached_action_validation(action_id, trace_id)`
+    - `set_cached_action_validation(action_id, trace_id, validation_result_json, ttl_seconds)`
 
 **6. Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
     - `execute_pg_query(tenant_id, query_text, params, use_replica=True)`
