@@ -63,6 +63,57 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - Implement the new functions in their respective `_tools.py` files.
     - Expose these functions via FastAPI routers.
 
+### Section 2: Technical Infrastructure Enhancements
+
+**1. Key Functionalities Identified:**
+    - **Advanced Queueing (RabbitMQ):** Tenant-specific priority queues, DLQs, dynamic batch sizing, AI-driven event prioritization.
+    - **Aggressive Caching (In-memory & Redis):** Multi-layered, tenant-isolated caching, AI-driven TTL optimization, Supabase Realtime for cache invalidation.
+    - **Database Optimization (PostgreSQL & pgvector):** Tenant-scoped indexes, AI-driven HNSW tuning, tenant-specific table partitioning, read replica routing.
+    - **Stateless & Optimized Services:** Tenant-specific service configurations (potentially AI-optimized), service profiling, metrics logging.
+    - **System Event/Metric Logging:** Logging various infrastructure-related events and metrics to Supabase.
+    - **AI Agent Usage:** For optimizing queue priority, cache TTLs, HNSW parameters, and service configurations.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Message Queue Interaction Tools (NEW - `tools/message_queues/message_queue_tools.py`)**
+        - `initialize_tenant_rabbitmq_queue(tenant_id)`: Sets up tenant-specific queues, DLQs, and exchanges.
+        - `publish_to_rabbitmq_queue(tenant_id, event_payload, urgency_level)`: Publishes event, potentially using AI agent for dynamic priority.
+        - `get_rabbitmq_queue_depth(tenant_id, queue_name)`: Retrieves current queue depth.
+        - `process_rabbitmq_batch(tenant_id)` (Note: May be an internal function for workers rather than a direct MCP tool).
+
+    b. **Caching Interaction Tools (NEW - `tools/caching/caching_tools.py`)**
+        - `get_cached_item(tenant_id, cache_key)`: Retrieves item from multi-layer cache (in-memory, Redis).
+        - `set_cached_item(tenant_id, cache_key, item_data, custom_ttl=None)`: Sets item in cache, potentially using AI agent for TTL.
+        - `invalidate_cache_key(tenant_id, cache_key_pattern)`: Invalidates cache entries.
+
+    c. **Supabase Stack Interaction Tools (`tools/supabase/supabase_tools.py`)**
+        - `log_system_event(tenant_id, event_type, payload)`: For infrastructure events (queue init, cache invalidation, index creation, etc.).
+        - `log_system_metric(tenant_id, metric_name, value_payload)`: For infrastructure metrics (queue stats, cache stats, query stats, etc.).
+        - `get_tenant_service_config(tenant_id)`: Fetches configuration for stateless services.
+
+    d. **Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
+        - `create_pg_tenant_index(tenant_id, table_name, column_names, index_type)`: Creates tenant-specific PostgreSQL indexes.
+        - `tune_pg_hnsw_index(tenant_id, index_name, ef_construction, m)`: Tunes pgvector HNSW index parameters.
+        - `create_pg_tenant_partition(tenant_id, table_name, partition_logic_details)`: Creates tenant-specific table partitions.
+        - `execute_pg_query(tenant_id, query_text, params, use_replica=True)`: (Enhanced) Executes PostgreSQL query with explicit read replica option.
+
+    e. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)**
+        - `predict_event_priority(tenant_id, event_details)`: For `QueueOptimizer`.
+        - `predict_cache_ttl(tenant_id, cache_key_details)`: For `CacheOptimizer`.
+        - `predict_hnsw_params(tenant_id, table_name)`: For `DatabaseOptimizer`.
+        - `predict_service_config(tenant_id, service_name, current_config)`: For `ServiceOptimizer`.
+
+    f. **System Command Execution Tools (Existing `execute_command`)**
+        - Potentially for triggering service profiling scripts (e.g., `clinic doctor`), though this might be more of a DevOps task.
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - Create new tool modules for Message Queues and Caching if they don't exist.
+    - Implement functions to interact with RabbitMQ (e.g., using `aio_pika` or `pika`).
+    - Implement functions to interact with Redis (e.g., using `redis-py`).
+    - Extend database tools for specific DDL operations (indexes, partitions) and HNSW tuning.
+    - Ensure all AI agent interactions are routed through the generic AI agent tool functions.
+    - Define schemas for new Supabase tables: `system_logs`, `system_metrics`, `tenant_services_config`.
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
@@ -72,6 +123,9 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_tenant_validation_rules(tenant_id)`
     - `get_tenant_table_config(tenant_id)`
     - `get_tenant_accessibility_config(tenant_id)`
+    - `log_system_event(tenant_id, event_type, payload)`
+    - `log_system_metric(tenant_id, metric_name, value_payload)`
+    - `get_tenant_service_config(tenant_id)`
     - `get_tenant_icon_set_config(tenant_id)` (Potential)
     - `get_tenant_grid_config(tenant_id)` (Potential)
 
@@ -79,9 +133,30 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_ai_input_suggestions(tenant_id, current_input_context)`
     - `get_ai_suggested_actions(tenant_id, current_context)`
     - `generate_ai_alt_text(image_url, image_type, tenant_id)`
+    - `predict_event_priority(tenant_id, event_details)`
+    - `predict_cache_ttl(tenant_id, cache_key_details)`
+    - `predict_hnsw_params(tenant_id, table_name)`
+    - `predict_service_config(tenant_id, service_name, current_config)`
 
 **3. Offline-First Sync Tools (`tools/offline_sync/offline_sync_tools.py`)** (Potential)
     - `process_offline_mutation_batch(mutations)`
+
+**4. Message Queue Interaction Tools (NEW - `tools/message_queues/message_queue_tools.py`)**
+    - `initialize_tenant_rabbitmq_queue(tenant_id)`
+    - `publish_to_rabbitmq_queue(tenant_id, event_payload, urgency_level)`
+    - `get_rabbitmq_queue_depth(tenant_id, queue_name)`
+    - `process_rabbitmq_batch(tenant_id)` (Potential internal worker function)
+
+**5. Caching Interaction Tools (NEW - `tools/caching/caching_tools.py`)**
+    - `get_cached_item(tenant_id, cache_key)`
+    - `set_cached_item(tenant_id, cache_key, item_data, custom_ttl=None)`
+    - `invalidate_cache_key(tenant_id, cache_key_pattern)`
+
+**6. Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
+    - `create_pg_tenant_index(tenant_id, table_name, column_names, index_type)`
+    - `tune_pg_hnsw_index(tenant_id, index_name, ef_construction, m)`
+    - `create_pg_tenant_partition(tenant_id, table_name, partition_logic_details)`
+    - `execute_pg_query(tenant_id, query_text, params, use_replica=True)`
 
 *(Further tool categories and functions will be added as analysis progresses)*
 
