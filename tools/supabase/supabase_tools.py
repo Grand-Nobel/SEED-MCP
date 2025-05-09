@@ -508,7 +508,14 @@ def update_table_data(db_client: Client, table_name: str, data_to_update: Dict[s
         print(f"Error updating data in table '{table_name}': {e}")
         return None
 
+from fastapi import APIRouter
 
+router = APIRouter()
+
+@router.get("/status")
+async def supabase_status():
+    return {"status": "Supabase module connected"}
+    
 def delete_table_data(db_client: Client, table_name: str, filters_list: List[Dict[str, Any]]) -> List[Dict[str, Any]] | None:
     """
     Generic tool to delete data from a Supabase table with dynamic filtering.
