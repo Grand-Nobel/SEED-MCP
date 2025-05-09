@@ -281,6 +281,53 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - Orchestrator logic will use Message Queue, Database, AI Agent, and Workflow tools extensively.
     - If AWS Nitro Enclaves are used, a new tool category for AWS interactions will be needed.
 
+### Section 6: Agent Learning, Evolution & Reward System
+
+**1. Key Functionalities Identified:**
+    - **Reward Signal Capture:** Extrinsic (user likes/dislikes/comments on agent outputs stored in `agent_logs` and `agent_shadow_action_responses`) and Intrinsic (system metrics like task success, latency, cost, conversion outcomes also in `agent_logs`).
+    - **ReflectionAgent:** Analyzes aggregated logs and feedback, generates recommendations for prompt/config tuning, agent reranking, fallback agents, and training data candidates. Logs recommendations to `reflection_logs`. Performs bias drift checks.
+    - **Reward Score Model:** Composite score calculated by ReflectionAgent using weighted metrics from `agent_learning_config`.
+    - **Agent Memory & Context:** Short-term (Execution Contract, Redis) and Long-term (Vector Store - `agent_memory_embeddings` with TTL policy).
+    - **Prompt Variant Management:** `agent_prompt_templates` table for A/B testing and evolution, including auto-retirement suggestions.
+    - **`agent_learning_config` Table:** Stores agent-specific tuning parameters for learning loop.
+    - **Agent Definition Schema (`agent_registry`):** Includes `ui_capabilities` and `pii_handling_capability`.
+    - **Agent Execution Modes:** Standard, Dry Run, Debug, Deterministic, Vector Disabled, controlled by execution flags.
+    - **Agent Versioning & Evolution Control:** Admin-approved workflow for applying ReflectionAgent recommendations.
+
+**2. Required MCP Tool Categories & Specific Functions:**
+
+    a. **Direct Database Interaction Tools (`tools/databases/database_tools.py`)**
+        - `update_agent_log_feedback_extrinsic(agent_log_id, user_id, feedback_rating, feedback_comment)`: Updates `agent_logs`.
+        - `update_agent_log_metrics_intrinsic(agent_log_id, metrics_payload)`: Updates `agent_logs`.
+        - `query_agent_logs_for_reflection_analysis(query_parameters)`: Fetches data for ReflectionAgent.
+        - `flag_agent_log_as_finetune_candidate(agent_log_id, is_candidate, reason)`: Updates `agent_logs`.
+        - `log_reflection_agent_output(reflection_run_id, recommendations_payload, bias_check_results)`: Inserts into `reflection_logs` (new table).
+        - `get_agent_learning_config_data(agent_name)`: Fetches from `agent_learning_config`.
+        - `update_agent_learning_config_data(agent_name, config_updates)`: Updates `agent_learning_config`.
+        - `get_agent_prompt_template_details(prompt_id_or_name, version_tag=None)`: From `agent_prompt_templates`.
+        - `create_new_agent_prompt_template(template_data)`: Inserts into `agent_prompt_templates`.
+        - `update_existing_agent_prompt_template(prompt_id, updates_payload)`: Updates `agent_prompt_templates` (e.g., `is_active`, `approved_by_admin`, `avg_reward_score`).
+        - `get_active_agent_prompt(agent_name)`: Fetches current active/approved prompt.
+        - `update_agent_memory_embedding_expiry(embedding_id, expires_at_timestamp)`: For `agent_memory_embeddings`.
+        - (Reinforced) `get_agent_definition` and `update_agent_definition` for `agent_registry` to manage `ui_capabilities`, `pii_handling_capability`, `active_prompt_template_id`, `current_stable_version`.
+
+    b. **AI Agent Interaction Tools (`tools/ai_agents/ai_agent_tools.py`)**
+        - `invoke_reflection_agent(trigger_payload)`: Triggers the ReflectionAgent's analysis cycle.
+        - (Potentially) `trigger_llm_finetuning_pipeline(model_provider_details, dataset_reference, new_model_identifier)`: If an external fine-tuning process is managed.
+
+    c. **Settings Management Tools (`tools/settings_management/settings_management_tools.py`)**
+        - (Reinforced) CRUD operations for `agent_learning_config` and `agent_prompt_templates` can be seen as settings.
+
+    d. **Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
+        - `trigger_admin_approval_workflow(recommendation_id, recommendation_details)`: For ReflectionAgent's suggestions.
+        - `update_system_config_after_approval(approved_change_details)`: Called by workflow upon admin approval to apply changes (e.g., update prompt, agent config).
+
+**3. High-Level Implementation Notes (MCP Perspective):**
+    - Define schemas for new tables: `reflection_logs`, `agent_prompt_templates`. (Schema for `agent_learning_config` is provided in Sec 6.7).
+    - Implement extensive new DB tool functions for managing agent learning configurations, prompt versions, and reflection logs.
+    - The ReflectionAgent (itself an AI agent) will be a consumer of many DB and AI Agent tools.
+    - The admin approval workflow for agent evolution will orchestrate calls to various MCP tools.
+
 ---
 ## Consolidated MCP Tool List (To be built incrementally)
 
@@ -309,6 +356,8 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `predict_hnsw_params(tenant_id, table_name)`
     - `predict_service_config(tenant_id, service_name, current_config)`
     - `dispatch_agent_task_to_runner(runner_details, execution_contract)`
+    - `invoke_reflection_agent(trigger_payload)`
+    - `trigger_llm_finetuning_pipeline(model_provider_details, dataset_reference, new_model_identifier)` (Potential)
 
 **3. Offline-First Sync Tools (`tools/offline_sync/offline_sync_tools.py`)** (Potential)
     - `process_offline_mutation_batch(mutations)`
@@ -351,6 +400,19 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `update_priority_model_weight(tenant_id, agent_id, task_type, weight)`
     - `get_all_priority_models_for_aggregation()`
     - `store_global_priority_model_weights(model_id, agent_id, task_type, weight)`
+    - `update_agent_log_feedback_extrinsic(agent_log_id, user_id, feedback_rating, feedback_comment)`
+    - `update_agent_log_metrics_intrinsic(agent_log_id, metrics_payload)`
+    - `query_agent_logs_for_reflection_analysis(query_parameters)`
+    - `flag_agent_log_as_finetune_candidate(agent_log_id, is_candidate, reason)`
+    - `log_reflection_agent_output(reflection_run_id, recommendations_payload, bias_check_results)`
+    - `get_agent_learning_config_data(agent_name)`
+    - `update_agent_learning_config_data(agent_name, config_updates)`
+    - `get_agent_prompt_template_details(prompt_id_or_name, version_tag=None)`
+    - `create_new_agent_prompt_template(template_data)`
+    - `update_existing_agent_prompt_template(prompt_id, updates_payload)`
+    - `get_active_agent_prompt(agent_name)`
+    - `update_agent_memory_embedding_expiry(embedding_id, expires_at_timestamp)`
+    - (Reinforced) `get_agent_definition`, `update_agent_definition`
     - Specific CRUD helpers for core tables (e.g., `create_lead`, `get_bookings_for_staff`, `log_interaction`, `log_agent_execution`, `log_billing_token_usage`, `get_file_metadata`, `create_file_metadata`, `delete_file_metadata`).
 
 **7. Workflow Management Tools (`tools/workflow_management/workflow_management_tools.py`)**
@@ -361,6 +423,8 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `trigger_workflow_run(tenant_id, workflow_def_id, trigger_event_data, input_context)`
     - `get_workflow_run_details(tenant_id, workflow_run_id)`
     - `update_workflow_run(tenant_id, workflow_run_id, status, current_step_id, steps_state_updates, error_log_updates)`
+    - `trigger_admin_approval_workflow(recommendation_id, recommendation_details)`
+    - `update_system_config_after_approval(approved_change_details)`
 
 **8. Settings Management Tools (`tools/settings_management/settings_management_tools.py`)**
     - `get_agent_config_value(tenant_id, agent_name, config_key, version_tag=None)`
@@ -369,6 +433,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `get_tenant_settings(tenant_id)`
     - `update_tenant_settings(tenant_id, settings_payload)`
     - (Reinforced) Functions for ACP, vector tuning, federated learning configs.
+    - (Reinforced) CRUD for `agent_learning_config`, `agent_prompt_templates`.
 
 **9. Agent Log Review Tools (`tools/agent_log_review/agent_log_review_tools.py`)**
     - `query_agent_logs(tenant_id, filters)`
@@ -381,7 +446,7 @@ This document outlines the required Model Context Protocol (MCP) tools for the S
     - `manage_collection(...)` (For external DBs)
     - `trigger_vector_reindex(database_type, collection_name_or_index_name)`
 
-**11. Cloud Service Interaction Tools (NEW - `tools/cloud_services/aws_tools.py` or similar)**
+**11. Cloud Service Interaction Tools (`tools/cloud_services/aws_tools.py` or similar)**
     - `aggregate_with_nitro_enclave(data_to_aggregate, aggregation_config)` (If AWS Nitro Enclaves are used)
 
 *(Further tool categories and functions will be added as analysis progresses.)*
