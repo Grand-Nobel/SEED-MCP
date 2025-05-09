@@ -4,7 +4,7 @@ import uvicorn
 
 # Assuming seed_supabase.py is in the same directory (root of the project)
 # and contains a router instance named 'router'
-import seed_supabase
+from tools import supabase
 
 # If you have other tool servers, you would import their routers as well
 # For example:
