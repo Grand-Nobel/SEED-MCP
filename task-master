@@ -40,9 +40,11 @@ Progress & Next Steps (as of 2025-05-09 00:05 UTC):
 *   Created corresponding FastAPI router files (`seed-<category>.py`) for each category.
 *   Integrated all routers into `main.py` and updated the tool discovery endpoint (`/`) to list all placeholder tools.
 *   Initiated implementation phase by adding basic logic to Supabase and Database tool functions (`tools/supabase/supabase_tools.py`, `tools/databases/database_tools.py`).
+*   Gathered all necessary information from the "SEED Outline" files regarding project requirements.
 
 **Next Steps:**
-1.  Continue the implementation phase by adding detailed, secure logic to the placeholder functions within each `<category>_tools.py` file.
-2.  Prioritize implementation based on project needs and dependencies, starting with Supabase, AI Agents, and Databases.
-3.  Ensure all implementations adhere to data sovereignty principles and security best practices, especially regarding third-party interactions and handling of sensitive data.
-4.  Incorporate mechanisms for capturing relevant interaction data (securely and respecting privacy) to support AI agent training, as requested.
+1.  Finalize the list of required MCP tools based on the gathered information and evaluation of existing MCP servers. (Conclusion: Custom tools are required for the categories listed under "Require Custom MCP Tool Development within `seed-mcp`" due to SEED's specific architecture and data sovereignty requirements).
+2.  Proceed with the implementation phase by adding detailed, secure logic to the placeholder functions within each `<category>_tools.py` file for the identified custom tools.
+3.  Prioritize implementation based on project needs and dependencies, starting with Supabase, AI Agents, and Databases.
+4.  Ensure all implementations adhere to data sovereignty principles and security best practices, especially regarding third-party interactions and handling of sensitive data.
+5.  Incorporate mechanisms for capturing relevant interaction data (securely and respecting privacy) to support AI agent training, as requested.
