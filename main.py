@@ -4,7 +4,7 @@ import uvicorn
 
 # Assuming seed_supabase.py is in the same directory (root of the project)
 # and contains a router instance named 'router'
-from tools import supabase
+from tools.supabase.supabase_tools import router as supabase_router
 
 # If you have other tool servers, you would import their routers as well
 # For example:
@@ -19,7 +19,7 @@ app = FastAPI(
 
 # Include the Supabase router
 # All routes from seed_supabase.py will be prefixed with /supabase
-app.include_router(seed_supabase.router, prefix="/supabase", tags=["Supabase Tools"])
+app.include_router(supabase_router, prefix="/supabase", tags=["Supabase Tools"])
 
 # Include other routers here as they are developed:
 # app.include_router(seed_ai_agents.router, prefix="/ai", tags=["AI Agent Tools"])
