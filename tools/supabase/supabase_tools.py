@@ -18,7 +18,7 @@ async def supabase_status():
 TenantTheme = Dict[str, Any]
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
-fly secrets set SUPABASE_URL="https://jcxtocfdzrflfsuufxnr.supabase.co" SUPABASE_API_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjeHRvY2ZkenJmbGZzdXVmeG5yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY1MjczMTIsImV4cCI6MjA2MjEwMzMxMn0.jR-1wEoeuAlMzhTea-BpjoWlx5l_ifzIlgDxMFiS7HA"
+
 if not SUPABASE_URL or not SUPABASE_API_KEY:
     raise RuntimeError("Missing Supabase credentials in environment variables.")
 
