@@ -64,8 +64,7 @@ def log_ui_event(tenant_id: str, event_type: str, payload: Dict[str, Any]) -> st
     except Exception as e:
         print(f"Error logging UI event for tenant {tenant_id}, event type {event_type}: {e}")
         return None
-
-def get_tenant_validation_rules(db_client: client, tenant_id: str) -> Dict[str, Any] | None:
+def get_tenant_validation_rules(db_client: Client, tenant_id: str) -> Dict[str, Any] | None:
     """
     Fetches form validation rules for a given tenant.
     Assumes a 'tenant_validation_rules' table with 'tenant_id' and a 'rules' JSONB column.
