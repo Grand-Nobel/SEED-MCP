@@ -16,13 +16,15 @@ async def supabase_status():
 
 # Placeholder for a more specific Pydantic model if we define one for Theme
 TenantTheme = Dict[str, Any]
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 
 if not SUPABASE_URL or not SUPABASE_ANON_KEY:
     raise RuntimeError("Missing Supabase credentials in environment variables.")
 
 db_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
 def get_tenant_theme(tenant_id: str) -> TenantTheme | None:
     """
     Fetches theme data (colors, typography) for a given tenant from the 'tenant_themes' table.
