@@ -549,4 +549,4 @@ def delete_table_data(db_client: Client, table_name: str, filters_list: List[Dic
     except Exception as e:
         print(f"Error deleting data from table '{table_name}': {e}")
         return None
-    __all__ = ["router"]
+ 
