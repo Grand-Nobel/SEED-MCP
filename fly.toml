@@ -1,4 +1,4 @@
-# fly.toml app configuration file generated for seed-mcp on 2025-05-09T23:35:51Z
+# fly.toml app configuration file generated for seed-mcp on 2025-05-10T06:48:45Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
@@ -13,7 +13,7 @@ primary_region = 'ord'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
   processes = ['app']
 
 [[vm]]
