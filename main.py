@@ -42,4 +42,4 @@ if __name__ == "__main__":
     # This is for local development running this main.py directly
     # For deployment (e.g., with Fly.io), Uvicorn will typically be run by the process manager
     # as configured in fly.toml or a Procfile (which uses Dockerfile CMD).
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=os.getenv("ENV", "") == "dev")
