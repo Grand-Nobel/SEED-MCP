@@ -1,18 +1,29 @@
 # Supabase Stack Interaction Tools
-from supabase import Client
+from supabase import create_client
 from typing import Dict, Any, List, Optional, Union
 import json # For parsing filters_json
+import os
 from fastapi import APIRouter
 
 router = APIRouter()
-
 @router.get("/status")
 async def supabase_status():
-    return {"status": "Supabase module connected"}
+    try:
+        response = db_client.table("tenant_themes").select("*").limit(1).execute()
+        return {"status": "Supabase module connected", "ping": bool(response.data)}
+    except Exception as e:
+        return {"status": "Supabase module error", "error": str(e)}
+
 # Placeholder for a more specific Pydantic model if we define one for Theme
 TenantTheme = Dict[str, Any]
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 
-def get_tenant_theme(db_client: Client, tenant_id: str) -> TenantTheme | None:
+if not SUPABASE_URL or not SUPABASE_API_KEY:
+    raise RuntimeError("Missing Supabase credentials in environment variables.")
+
+db_client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
+def get_tenant_theme(tenant_id: str) -> TenantTheme | None:
     """
     Fetches theme data (colors, typography) for a given tenant from the 'tenant_themes' table.
     Assumes 'tenant_themes' table has 'tenant_id' as primary key and theme-related columns.
@@ -28,7 +39,8 @@ def get_tenant_theme(db_client: Client, tenant_id: str) -> TenantTheme | None:
         # In a real scenario, you might raise a custom exception or return a specific error object
         return None
 
-def log_ui_event(db_client: Client, tenant_id: str, event_type: str, payload: Dict[str, Any]) -> str | None:
+def log_ui_event(tenant_id: str, event_type: str, payload: Dict[str, Any]) -> str | None:
+    
     """
     Logs UI events to the 'ui_events' table in Supabase.
     Assumes 'ui_events' table has columns: tenant_id, event_type, payload, and an auto-generated id.
