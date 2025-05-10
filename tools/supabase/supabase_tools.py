@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional, Union
 import json # For parsing filters_json
 import os
 from fastapi import APIRouter
+from supabase.client import Client
 
 router = APIRouter()
 @router.get("/status")
