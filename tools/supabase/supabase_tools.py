@@ -2,7 +2,13 @@
 from supabase import Client
 from typing import Dict, Any, List, Optional, Union
 import json # For parsing filters_json
+from fastapi import APIRouter
 
+router = APIRouter()
+
+@router.get("/status")
+async def supabase_status():
+    return {"status": "Supabase module connected"}
 # Placeholder for a more specific Pydantic model if we define one for Theme
 TenantTheme = Dict[str, Any]
 
@@ -508,13 +514,6 @@ def update_table_data(db_client: Client, table_name: str, data_to_update: Dict[s
         print(f"Error updating data in table '{table_name}': {e}")
         return None
 
-from fastapi import APIRouter
-
-router = APIRouter()
-
-@router.get("/status")
-async def supabase_status():
-    return {"status": "Supabase module connected"}
     
 def delete_table_data(db_client: Client, table_name: str, filters_list: List[Dict[str, Any]]) -> List[Dict[str, Any]] | None:
     """
@@ -550,3 +549,4 @@ def delete_table_data(db_client: Client, table_name: str, filters_list: List[Dic
     except Exception as e:
         print(f"Error deleting data from table '{table_name}': {e}")
         return None
+    __all__ = ["router"]
