@@ -564,3 +564,44 @@ def delete_table_data(db_client: Client, table_name: str, filters_list: List[Dic
         print(f"Error deleting data from table '{table_name}': {e}")
         return None
  
+
+def get_create_map_features_table_sql() -> Dict[str, str]:
+    """
+    Returns the SQL script to create the 'map_features' table in Supabase.
+    Note: Executing DDL (CREATE TABLE) is typically done via Supabase migrations
+    or the Supabase UI, not via the standard client used by these tools.
+    You will need to run this script manually.
+    """
+    sql_script = '''
+-- Enable the uuid-ossp extension if not already enabled (needed for uuid_generate_v4())
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Create the map_features table
+CREATE TABLE public.map_features (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  tenant_id uuid, -- Assuming tenant_id is a UUID, adjust type if necessary
+  name text,
+  description text,
+  latitude double precision,
+  longitude double precision,
+  type text,
+  properties jsonb
+);
+
+-- Add trigger to update 'updated_at' timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_map_features_updated_at
+BEFORE UPDATE ON public.map_features
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+'''
+    return {"sql_script": sql_script}
